@@ -33,6 +33,7 @@ Require Import
         Fiat.Narcissus.Formats.Vector
         Fiat.Narcissus.Formats.EnumOpt
         Fiat.Narcissus.Formats.SumTypeOpt
+        Fiat.Narcissus.Formats.VarintOpt
         Fiat.Narcissus.Formats.StringOpt
         Fiat.Narcissus.Stores.EmptyStore
         Fiat.Narcissus.Automation.Solver.
@@ -46,15 +47,6 @@ Ltac fill_ind_h f :=
   let t := type of f in
   fill_ind_h' t f.
 
-(* :TODO: *)
-Ltac decode_opt_to_inv :=
-  repeat match goal with
-         | H : _ = Some (_, _, _) |- _ =>
-           apply DecodeBindOpt2_inv in H; destruct H as [? [? [? [? ?]]]]
-         | H : Some (_, _, _) = Some (_, _, _) |- _ => inversion H; clear H
-         | H : Some (_, _, _) = _ |- _ => symmetry in H
-         end.
-
 Ltac existT_eq_dec :=
     match goal with
     | [ H : existT _ _ _ = existT _ _ _ |- _ ] =>
@@ -65,27 +57,6 @@ Ltac existT_eq_dec :=
 Ltac gen_eq_rect :=
   match goal with
   | _ : _ |- context [eq_rect _ _ _ _ ?e] => generalize e; try destruct 0
-  end.
-
-Ltac solve_by_extensionality n :=
-  match n with
-  | O => idtac
-  | S ?n' => 
-    let a := fresh "a" in
-    extensionality a; solve_by_extensionality n'
-  end; auto.
-
-Ltac solve_extensionality' f g n :=
-  replace g with f by (solve_by_extensionality n);
-  auto.
-
-(* :TODO: *)
-Ltac solve_extensionality :=
-  intros;
-  match goal with
-  | H : forall a1, ?f a1 = ?g a1 |- _ => solve_extensionality' f g 1
-  | H : forall a1 a2, ?f a1 a2 = ?g a1 a2 |- _ => solve_extensionality' f g 2
-  | H : forall a1 a2 a3, ?f a1 a2 a3 = ?g a1 a2 a3 |- _ => solve_extensionality' f g 3
   end.
 
 Definition type_cast {A B : Type} (pf : A = B) (v : A) : B.
@@ -219,6 +190,13 @@ Inductive PB_Type : Set :=
 (* | PB_Repeated : PB_SingularType -> PB_Type *)
 .
 
+Definition PB_Type_eq_dec
+  : forall t1 t2 : PB_Type, {t1 = t2} + {t1 <> t2}.
+Proof.
+  decide equality.
+  decide equality.
+Defined.
+
 Definition PB_Type_denote (ty : PB_Type) : Type :=
   match ty with
   | PB_Singular sty => PB_SingularType_denote sty
@@ -229,7 +207,7 @@ Definition PB_Type_format (ty : PB_Type) : FormatM (PB_Type_denote ty) ByteStrin
   | PB_Singular sty => PB_SingularType_format sty
   end.
 
-(* :Q: extend decode_step *)
+(* :TODO: extend decode_step *)
 Definition PB_Type_decoder
         (ty : PB_Type)
   : { decode : _ |
@@ -399,29 +377,56 @@ Proof.
     + apply IHdesc.
 Qed.
 
-Definition PB_Message_nodup {n} (desc : PB_Message n) :=
+Definition PB_Message_tags_nodup {n} (desc : PB_Message n) :=
+  forall i1 i2 : Fin.t n,
+    Vector.nth (PB_Message_tags desc) i1 = Vector.nth (PB_Message_tags desc) i2 ->
+    i1 = i2.
+
+Definition PB_Message_names_nodup {n} (desc : PB_Message n) :=
+  forall i1 i2 : Fin.t n,
+    PB_FieldName (Vector.nth desc i1) = PB_FieldName (Vector.nth desc i2) ->
+    i1 = i2.
+
+Definition PB_Message_OK {n} (desc : PB_Message n) :=
+  Vector.Forall PB_Field_OK desc /\
+  PB_Message_tags_nodup desc /\ PB_Message_names_nodup desc.
+
+Definition PB_Message_nodup' {n} (desc : PB_Message n) :=
   NoDupVector (PB_Message_tags desc) /\
   NoDupVector (HeadingNames (PB_Message_heading desc)).
 
-Definition PB_Message_nodup' {n} (desc : PB_Message n) :=
-  forall (i1 i2 : Fin.t n), i1 <> i2 ->
-                       ((PB_FieldTag (Vector.nth desc i1)) <> (PB_FieldTag (Vector.nth desc i2)) /\
-                        (PB_FieldName (Vector.nth desc i1)) <> (PB_FieldName (Vector.nth desc i2))).
-
-Definition PB_Message_OK {n} (desc : PB_Message n) :=
-  Vector.Forall PB_Field_OK desc /\ PB_Message_nodup desc.
-
-Fixpoint PB_Message_OK' {n} (desc : PB_Message n) :=
-  match desc with
-  | Vector.nil => True
-  | Vector.cons fld _ desc' => PB_Field_OK fld /\ PB_Message_OK desc'
-  end /\ PB_Message_nodup desc.
-
-Definition PB_Message_OK'' {n} (desc : PB_Message n) :=
-  (forall fld, Vector.In fld desc -> PB_Field_OK fld) /\ PB_Message_nodup desc.
+Definition PB_Message_OK' {n} (desc : PB_Message n) :=
+  (forall fld, Vector.In fld desc -> PB_Field_OK fld) /\ PB_Message_nodup' desc.
 
 Definition BoundedTag {n} (desc : PB_Message n) :=
   BoundedIndex (PB_Message_tags desc).
+
+Theorem BoundedTag_inj {n} (desc : PB_Message n)
+  : PB_Message_OK desc ->
+    forall t1 t2 : BoundedTag desc,
+      bindex t1 = bindex t2 -> t1 = t2.
+Proof.
+  unfold PB_Message_OK, PB_Message_tags_nodup.
+  intros [_ [? _]]; intros. destruct t1, t2. destruct indexb, indexb0.
+  simpl in *. subst. apply H in H0. subst. reflexivity.
+Qed.
+
+Lemma vector_in {A} {n} (v : Vector.t A n)
+  : forall i a, Vector.nth v i = a -> Vector.In a v.
+Proof.
+  intros. induction i.
+  - subst. revert n v. apply caseS. intros.
+    simpl. constructor.
+  - subst. revert i IHi. pattern n, v. apply caseS.
+    intros. simpl in *. constructor. apply IHi. reflexivity.
+Qed.
+
+Theorem BoundedTag_in {n} (desc : PB_Message n)
+  : forall t1 : BoundedTag desc, Vector.In (bindex t1) (PB_Message_tags desc).
+Proof.
+  intros. destruct t1. destruct indexb. simpl in *.
+  eapply vector_in; eauto.
+Qed.
 
 Fixpoint PB_Message_boundedTag' {n} (tags : Vector.t PB_TagType n) (m : PB_TagType)
   : (BoundedIndex tags) + {~ Vector.In m tags}.
@@ -829,26 +834,6 @@ Proof.
             simpl proj1_sig; omega).
 Defined.
 
-(* Copy from DomainNameOpt *)
-Lemma Decode_w_Measure_lt_eq_inv
-  : forall (A B : Type) (cache : Cache) (monoid : Monoid B)
-      (A_decode : B -> CacheDecode -> option (A * B * CacheDecode))
-      (b : B) (cd : CacheDecode)
-      (A_decode_lt : forall (b0 : B) (cd0 : CacheDecode) (a : A) (b' : B) (cd' : CacheDecode),
-          A_decode b0 cd0 = Some (a, b', cd') -> lt_B b' b0)
-      (a' : A) (cd' : CacheDecode)
-      pf,
-    Decode_w_Measure_lt A_decode b cd A_decode_lt = Some (a', pf, cd')
-    -> A_decode b cd = Some (a', `pf , cd').
-Proof.
-  unfold Decode_w_Measure_lt; intros.
-  revert pf H.
-  generalize (A_decode_lt b cd).
-  destruct (A_decode b cd) as [ [ [? ?] ?] | ]; simpl; intros;
-    try discriminate.
-  injections; reflexivity.
-Qed.
-
 Theorem PB_IR_decode_correct {n} (desc : PB_Message n)
         {P : CacheDecode -> Prop}
         (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b)))
@@ -925,43 +910,53 @@ Proof.
     generalize dependent data.
     generalize dependent ext.
     generalize dependent bin.
-    apply (well_founded_ind lt_wf) with (a:=sz); intros.
+    induction sz using (well_founded_ind lt_wf); intros.
     rewrite Coq.Init.Wf.Fix_eq in H1 by solve_extensionality.
-    destruct x. {
+    destruct sz. {
       inversion H1. clear H1. subst. split; auto.
       exists mempty, env. repeat split; intros.
       - symmetry. apply mempty_left.
       - inversion H1. reflexivity.
       - inversion H1.
     } {
-    decode_opt_to_inv.
-    destruct x1. simpl proj1_sig in H3.  simpl proj2_sig in H3.
-    apply Decode_w_Measure_lt_eq_inv in H1. simpl in H1.
-    destruct (PB_IRElm_decode_correct desc) with (P:=P); auto. clear H4.
-    edestruct H5 as [? [? [? [? [? [? ?]]]]]]; eauto. clear H5.
-    destruct lt_dec; try congruence.
-    decode_opt_to_inv. subst.
-    edestruct H. 3:eauto. unfold lt_B in l. omega. eauto. eauto.
-    destruct H12 as [? [? [? [? [[? ?] ?]]]]].
-    split; eauto. eexists _, _. repeat split.
-    - computes_to_econstructor; eauto.
-      computes_to_econstructor; eauto.
-    - simpl fst. rewrite <- mappend_assoc. subst. auto.
-    - intros. unfold compose in H17. unfold Bind2 in H17.
-      computes_to_inv. destruct v, v0. simpl fst in *. simpl snd in *.
-      inversion H17''. subst. clear H17''.
-      specialize (H14 _ _ _ H17'). rewrite @mappend_measure. rewrite H14.
-      repeat rewrite mappend_measure.
-      repeat rewrite mappend_measure in n0.
-      assert (bin_measure b0 = bin_measure x3). {
-        eapply PB_IRElm_format_sz_eq; eauto.
-      } omega.
-    - intros. destruct H17.
-      + subst. eauto.
-      + apply H15. eauto.
+      decode_opt_to_inv.
+      destruct x0. simpl proj1_sig in H3.  simpl proj2_sig in H3.
+      apply Decode_w_Measure_lt_eq_inv in H1. simpl in H1.
+      destruct (PB_IRElm_decode_correct desc) with (P:=P); auto. clear H4.
+      edestruct H5 as [? [? [? [? [? [? ?]]]]]]; eauto. clear H5.
+      destruct lt_dec; try congruence.
+      decode_opt_to_inv. subst.
+      edestruct H. 3:eauto. unfold lt_B in l. omega. eauto. eauto.
+      destruct H12 as [? [? [? [? [[? ?] ?]]]]].
+      split; eauto. eexists _, _. repeat split.
+      - computes_to_econstructor; eauto.
+        computes_to_econstructor; eauto.
+      - simpl fst. rewrite <- mappend_assoc. subst. auto.
+      - intros. unfold compose in H17. unfold Bind2 in H17.
+        computes_to_inv. destruct v, v0. simpl fst in *. simpl snd in *.
+        inversion H17''. subst. clear H17''.
+        specialize (H14 _ _ _ H17'). rewrite @mappend_measure. rewrite H14.
+        repeat rewrite mappend_measure.
+        repeat rewrite mappend_measure in n0.
+        assert (bin_measure b0 = bin_measure x2). {
+          eapply PB_IRElm_format_sz_eq; eauto.
+        } omega.
+      - intros. destruct H17.
+        + subst. eauto.
+        + apply H15. eauto.
     }
   }
 Qed.
+
+Instance PR_IR_monoid : Monoid PB_IR :=
+  {| mappend := @app _;
+     bin_measure := @length _;
+     mempty := nil;
+     mappend_measure := @app_length _;
+     mempty_left := @app_nil_l _;
+     mempty_right := @app_nil_r _;
+     mappend_assoc := @app_assoc _
+  |}.
 
 Inductive PB_IR_refine {n} {desc : PB_Message n}
   : PB_IR -> PB_Message_denote desc -> Prop :=
@@ -977,28 +972,101 @@ Inductive PB_IR_refine {n} {desc : PB_Message n}
                          PB_IRVal := v |} :: ir)
                      (PB_Message_update msg t v).
 
-(* :Q: get rid of PB_IRElm *)
-Instance PR_IR_monoid : Monoid PB_IR :=
-  {| mappend := (@app PB_IRElm);
-     bin_measure := (@length PB_IRElm);
-     mempty := nil;
-     mappend_measure := (@app_length PB_IRElm);
-     mempty_left := (@app_nil_l PB_IRElm);
-     mempty_right := (@app_nil_r PB_IRElm);
-     mappend_assoc := (@app_assoc PB_IRElm)
-  |}.
+Definition PB_Message_IR_format {n} (desc : PB_Message n)
+  : FormatM (PB_Message_denote desc) PB_IR :=
+  fun msg _ => {b | PB_IR_refine (fst b) msg}.
+
+Definition PB_Message_IR_decode {n} (desc : PB_Message n)
+  : DecodeM (PB_Message_denote desc) PB_IR.
+Proof.
+  refine
+    (fix decode ir cd :=
+       match ir with
+       | nil => Some (PB_Message_default desc, nil, cd)
+       | {| PB_IRTag := t;
+            PB_IRType := ty;
+            PB_IRVal := v |} :: ir' =>
+         `(msg, ir2, cd') <- decode ir' cd;
+         match PB_Message_boundedTag desc t with
+         | inleft tag =>
+           if PB_Type_eq_dec ty (PB_Message_tagToType tag) then
+             Some (PB_Message_update msg tag _ (* v *),
+                   ir2, cd')
+           else None
+         | _ => None
+         end
+       end).
+  rewrite <- e.
+  exact v.
+Defined.
+
+Local Transparent computes_to.
+Local Transparent Pick.
+Theorem PB_Message_IR_decode_correct {n} (desc : PB_Message n)
+        (HP : PB_Message_OK desc)
+        {P : CacheDecode -> Prop}
+        (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b)))
+  : CorrectDecoder _
+                   (fun _ => True)
+                   (fun _ ext => ext = mempty)
+                   (PB_Message_IR_format desc) (PB_Message_IR_decode desc) P.
+Proof.
+  unfold PB_Message_IR_format, PB_Message_IR_decode.
+  split; intros. {
+    subst ext.
+    unfold computes_to in H2. unfold Pick in H2.
+    simpl in H2. induction H2. {
+      eexists. intuition.
+    } {
+      destruct IHPB_IR_refine as [? [? [? ?]]].
+      eexists. repeat split; intros; eauto. simpl.
+      simpl in H1. rewrite H1. simpl.
+      destruct PB_Message_boundedTag eqn:Heq.
+      apply PB_Message_boundedTag_correct in Heq.
+      apply BoundedTag_inj in Heq. subst.
+      - destruct PB_Type_eq_dec. 
+        + repeat progress f_equal.
+          rewrite <- eq_rect_eq_dec by (apply PB_Type_eq_dec). auto.
+        + easy.
+      - easy.
+      - contradiction (BoundedTag_in desc t).
+    }
+  } {
+    generalize dependent env.
+    generalize dependent env'.
+    generalize dependent xenv'.
+    generalize dependent data.
+    generalize dependent ext.
+    induction bin; intros. {
+      inversion H1. subst. split; auto.
+      exists [], env. repeat split; eauto.
+      constructor.
+    } {
+      destruct a.
+      decode_opt_to_inv.
+      destruct PB_Message_boundedTag eqn:Heq; try easy.
+      destruct PB_Type_eq_dec; try easy.
+      inversion H2. clear H2. subst.
+      edestruct IHbin as [? [? [? [? [? [? ?]]]]]]; eauto. split; auto.
+      eexists _, _; eauto. repeat split; eauto.
+      constructor; eauto. subst. simpl.
+      apply PB_Message_boundedTag_correct in Heq. subst. auto.
+    }
+  }
+  Grab Existential Variables. auto.
+Qed.
 
 (* Example *)
 Open Scope Tuple.
 Import Vectors.VectorDef.VectorNotations.
 
 Notation "'PB_MESSAGE_TAG' t" :=
-  (@Build_BoundedIndex _ _ _ t%nat _)
+  (@Build_BoundedIndex _ _ _ (natToWord 32 t%nat) _)
     (at level 70).
 
 Definition PersonMessage : PB_Message _ :=
-  [{| PB_FieldType := PB_Singular PB_fixed64; PB_FieldName := "id"; PB_FieldTag := 1 |};
-     {| PB_FieldType := PB_Singular PB_fixed32; PB_FieldName := "age"; PB_FieldTag := 2 |}].
+  [{| PB_FieldType := PB_Singular PB_fixed64; PB_FieldName := "id"; PB_FieldTag := (natToWord 32 1) |};
+     {| PB_FieldType := PB_Singular PB_fixed32; PB_FieldName := "age"; PB_FieldTag := (natToWord 32 2) |}].
 Definition PersonFieldId := PersonMessage[@Fin.F1].
 Definition PersonFieldAge := PersonMessage[@Fin.FS Fin.F1].
 
