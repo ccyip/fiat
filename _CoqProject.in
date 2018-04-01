@@ -335,6 +335,7 @@ src/Narcissus/Examples/ICMP_Packet.v
 src/Narcissus/Examples/IntExample.v
 src/Narcissus/Examples/Toy.v
 src/Narcissus/Examples/Toy2.v
+src/Narcissus/Examples/ProtobufSpec.v
 src/Narcissus/Examples/DNS/DNSPacket.v
 src/Narcissus/Examples/DNS/DnsOpt.v
 src/Narcissus/Examples/DNS/RRecordTypes.v
@@ -373,6 +374,7 @@ src/Narcissus/Formats/SumTypeOpt.v
 src/Narcissus/Formats/Vector.v
 src/Narcissus/Formats/Word.v
 src/Narcissus/Formats/WordOpt.v
+src/Narcissus/Formats/VarintOpt.v
 src/Narcissus/Stores/Cache.v
 src/Narcissus/Stores/DomainNameStore.v
 src/Narcissus/Stores/EmptyStore.v
