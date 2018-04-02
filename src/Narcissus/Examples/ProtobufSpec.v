@@ -1,4 +1,5 @@
 Require Import
+        Coq.ZArith.BinInt
         Coq.Strings.String
         Coq.Vectors.Vector
         Coq.omega.Omega
@@ -65,28 +66,9 @@ Proof.
   exact v.
 Defined.
 
-Lemma format_word_sz n (w : word n)
-  : forall ce ce' b,
-    format_word w ce ↝ (b, ce') ->
-    bin_measure b = n.
-Proof.
-  induction w; intros; inversion H; subst; clear H.
-  - auto.
-  - rewrite (@measure_enqueue _ _ _ ByteString_QueueMonoidOpt).
-    simpl B_measure. rewrite Nat.add_1_r. f_equal.
-    apply (IHw ce' ce'). apply ReturnComputes.
-Qed.
-
-Theorem format_word_m8 n (w : word n)
-  : forall ce ce' b,
-    n mod 8 = 0 ->
-    format_word w ce ↝ (b, ce') ->
-    bin_measure b mod 8 = 0.
-Proof.
-  intros. erewrite format_word_sz; eauto.
-Qed.
-
 Local Arguments natToWord : simpl never.
+Local Arguments NToWord : simpl never.
+Local Arguments wordToN : simpl never.
 Local Arguments pow2 : simpl never.
 Local Arguments weqb : simpl never.
 
@@ -96,13 +78,19 @@ Inductive PB_WireType : Set :=
 | PB_64bit : PB_WireType
 | PB_LengthDelimited : PB_WireType.
 
-Definition PB_WireType_denote (wty : PB_WireType) : nat :=
+Definition PB_WireType_denote (wty : PB_WireType) : N :=
   match wty with
   | PB_Varint => 0
   | PB_32bit => 5
   | PB_64bit => 1
   | PB_LengthDelimited => 2
   end.
+
+Theorem PB_WireType_denote_3bits (wty : PB_WireType)
+  : N.lt (N.log2 (PB_WireType_denote wty)) 3%N.
+Proof.
+  destruct wty; easy.
+Qed.
 
 Inductive PB_SingularType : Set :=
 | PB_fixed32 : PB_SingularType
@@ -175,14 +163,14 @@ Proof.
   intros; f_equal; eapply PB_SingularType_format_eq; eauto.
 Qed.
 
-Theorem PB_SingularType_format_m8 (sty : PB_SingularType)
+Theorem PB_SingularType_format_byte (sty : PB_SingularType)
   : forall d b ce ce',
     PB_SingularType_format sty d ce ↝ (b, ce') ->
     bin_measure b mod 8 = 0.
 Proof.
   unfold PB_SingularType_format.
   destruct sty; intros;
-    eapply format_word_m8; eauto; eauto.
+    eapply format_word_byte; eauto; eauto.
 Qed.
 
 Inductive PB_Type : Set :=
@@ -254,20 +242,20 @@ Proof.
   intros; f_equal; eapply PB_Type_format_eq; eauto.
 Qed.
 
-Theorem PB_Type_format_m8 (ty : PB_Type)
+Theorem PB_Type_format_byte (ty : PB_Type)
   : forall d b ce ce',
     PB_Type_format ty d ce ↝ (b, ce') ->
     bin_measure b mod 8 = 0.
 Proof.
   unfold PB_Type_format. destruct ty.
-  apply PB_SingularType_format_m8.
+  apply PB_SingularType_format_byte.
 Qed.
 
 Definition PB_Type_default (ty : PB_Type) : PB_Type_denote ty :=
   match ty with
   | PB_Singular sty => match sty with
-                      | PB_fixed32 => natToWord 32 0
-                      | PB_fixed64 => natToWord 64 0
+                      | PB_fixed32 => wzero 32
+                      | PB_fixed64 => wzero 64
                       end
   end.
 
@@ -279,13 +267,10 @@ Definition PB_Type_toWireType (ty : PB_Type) : PB_WireType :=
                           end
   end.
 
-(* :TODO: use N when varint is available. *)
-Definition PB_TagType := word 32.
-
 Record PB_Field := 
   { PB_FieldType : PB_Type;
     PB_FieldName : string;
-    PB_FieldTag : PB_TagType }.
+    PB_FieldTag : N }.
 
 Definition PB_Field_denote (fld : PB_Field) :=
   match fld with
@@ -293,9 +278,8 @@ Definition PB_Field_denote (fld : PB_Field) :=
     (name :: PB_Type_denote ty)%Attribute
   end.
 
-Definition PB_FieldTag_OK (t : PB_TagType) :=
-  (* (1 <= t <= 18999) \/ (20000 <= t <= 536870911). *)
-  natToWord 32 1 <= t.
+Definition PB_FieldTag_OK (t : N) :=
+  ((1 <= t <= 18999) \/ (20000 <= t <= 536870911))%N.
 
 Definition PB_FieldName_OK (n : string) :=
   n <> EmptyString.
@@ -391,13 +375,6 @@ Definition PB_Message_OK {n} (desc : PB_Message n) :=
   Vector.Forall PB_Field_OK desc /\
   PB_Message_tags_nodup desc /\ PB_Message_names_nodup desc.
 
-Definition PB_Message_nodup' {n} (desc : PB_Message n) :=
-  NoDupVector (PB_Message_tags desc) /\
-  NoDupVector (HeadingNames (PB_Message_heading desc)).
-
-Definition PB_Message_OK' {n} (desc : PB_Message n) :=
-  (forall fld, Vector.In fld desc -> PB_Field_OK fld) /\ PB_Message_nodup' desc.
-
 Definition BoundedTag {n} (desc : PB_Message n) :=
   BoundedIndex (PB_Message_tags desc).
 
@@ -411,31 +388,57 @@ Proof.
   simpl in *. subst. apply H in H0. subst. reflexivity.
 Qed.
 
+Lemma vector_in_fin {A} {n} (v : Vector.t A n)
+  : forall a : A, Vector.In a v -> exists i, Vector.nth v i = a.
+Proof.
+  intros. induction H.
+  - exists Fin.F1. auto.
+  - destruct IHIn. exists (Fin.FS x0).
+    auto.
+Qed.
+
+Theorem PB_Field_inj {n} (desc : PB_Message n)
+  : PB_Message_OK desc ->
+    forall fld1 fld2 : PB_Field,
+      Vector.In fld1 desc -> Vector.In fld2 desc ->
+      PB_FieldTag fld1 = PB_FieldTag fld2 ->
+      fld1 = fld2.
+Proof.
+  unfold PB_Message_OK, PB_Message_tags_nodup.
+  intros [_ [? _]]; intros.
+  destruct (vector_in_fin _ _ H0).
+  destruct (vector_in_fin _ _ H1).
+  subst.
+  f_equal. apply H.
+  rewrite !PB_Message_tags_correct.
+  assumption.
+Qed.
+
 Lemma vector_in {A} {n} (v : Vector.t A n)
-  : forall i a, Vector.nth v i = a -> Vector.In a v.
+  : forall i,  Vector.In (Vector.nth v i) v.
 Proof.
   intros. induction i.
   - subst. revert n v. apply caseS. intros.
     simpl. constructor.
   - subst. revert i IHi. pattern n, v. apply caseS.
-    intros. simpl in *. constructor. apply IHi. reflexivity.
+    intros. simpl in *. constructor. apply IHi.
 Qed.
 
 Theorem BoundedTag_in {n} (desc : PB_Message n)
   : forall t1 : BoundedTag desc, Vector.In (bindex t1) (PB_Message_tags desc).
 Proof.
   intros. destruct t1. destruct indexb. simpl in *.
-  eapply vector_in; eauto.
+  subst. eapply vector_in; eauto.
 Qed.
 
-Fixpoint PB_Message_boundedTag' {n} (tags : Vector.t PB_TagType n) (m : PB_TagType)
+Fixpoint PB_Message_boundedTag' {n} (tags : Vector.t N n) (m : N)
   : (BoundedIndex tags) + {~ Vector.In m tags}.
 Proof.
   refine
     (match tags with
      | Vector.nil => inright _
      | Vector.cons t n' tags' =>
-       if weq t m then
+       if N.eq_dec t m then
          inleft
            {| bindex := m;
               indexb := {| ibound := Fin.F1;
@@ -459,11 +462,11 @@ Proof.
        subst; congruence).
 Defined.
 
-Definition PB_Message_boundedTag {n} (desc : PB_Message n) (m : PB_TagType)
+Definition PB_Message_boundedTag {n} (desc : PB_Message n) (m : N)
   : (BoundedTag desc) + {~ Vector.In m (PB_Message_tags desc)} :=
   PB_Message_boundedTag' (PB_Message_tags desc) m.
 
-Theorem PB_Message_boundedTag_correct {n} (desc : PB_Message n) (m : PB_TagType)
+Theorem PB_Message_boundedTag_correct {n} (desc : PB_Message n) (m : N)
   : forall tag, PB_Message_boundedTag desc m = inleft tag -> bindex tag = m.
 Proof.
   unfold BoundedTag. unfold PB_Message_boundedTag.
@@ -475,7 +478,7 @@ Proof.
     inversion Heqtags.
     existT_eq_dec.
     specialize (IHtags t H2).
-    inversion H. destruct (weq _ _).
+    inversion H. destruct (N.eq_dec _ _).
     + inversion H3; auto.
     + destruct (PB_Message_boundedTag' tags m);
         try solve [inversion H3].
@@ -496,7 +499,7 @@ Proof.
       revert boundi IHtags H3.
       rewrite H6, H7.
       intros. f_equal. f_equal.
-      apply UIP_dec. apply weq.
+      apply UIP_dec. apply N.eq_dec.
 Qed.
 
 Definition PB_Message_tagToIndex {n} {desc : PB_Message n}
@@ -514,27 +517,35 @@ Proof.
   eauto.
 Qed.
 
+Theorem PB_Message_tagToIndex_correct' {n} (desc : PB_Message n)
+        (tag : BoundedTag desc)
+  : PB_Message_OK desc ->
+    forall fld, Vector.In fld desc ->
+           PB_FieldTag fld = bindex tag ->
+           fld = Vector.nth desc (PB_Message_tagToIndex tag).
+Proof.
+  intros. destruct tag. destruct indexb.
+  destruct desc; intros; try easy.
+  revert desc boundi H fld H0 H1. pattern n, ibound.
+  apply Fin.caseS; intros; simpl in *.
+  - subst. eapply PB_Field_inj; eauto. constructor.
+  - eapply PB_Field_inj; eauto. constructor. apply vector_in.
+    subst. rewrite <- PB_Message_tags_correct. auto.
+Qed.
+
 Definition PB_Message_tagToType {n} {desc : PB_Message n}
            (tag : BoundedTag desc) :=
   PB_FieldType (Vector.nth desc (PB_Message_tagToIndex tag)).
 
 Theorem PB_Message_tagToType_correct {n} (desc : PB_Message n)
         (tag : BoundedTag desc)
-  : exists fld, Vector.In fld desc /\
-           PB_FieldTag fld = bindex tag /\
+  : PB_Message_OK desc ->
+    forall fld, Vector.In fld desc ->
+           PB_FieldTag fld = bindex tag ->
            PB_FieldType fld = PB_Message_tagToType tag.
 Proof.
-  destruct tag. destruct indexb.
-  induction desc; intros.
-  - inversion ibound.
-  - revert desc boundi IHdesc. pattern n, ibound.
-    apply Fin.caseS; intros; simpl in boundi.
-    + eexists. repeat split.
-      * constructor.
-      * eauto.
-    + destruct (IHdesc p boundi) as [? [? [? ?]]].
-      exists x. repeat split; eauto.
-      constructor. assumption.
+  intros.
+  rewrite (PB_Message_tagToIndex_correct' desc tag H fld); eauto.
 Qed.
 
 Definition PB_Message_tagToDenoteType {n} {desc : PB_Message n}
@@ -571,13 +582,9 @@ Definition PB_Message_update {n} {desc : PB_Message n}
                      value).
 
 Record PB_IRElm :=
-  { PB_IRTag : PB_TagType;
+  { PB_IRTag : N;
     PB_IRType : PB_Type;
     PB_IRVal : PB_Type_denote PB_IRType }.
-
-Definition PB_IRElm_OK' {n} (desc : PB_Message n) (elm : PB_IRElm) :=
-  exists (tag : BoundedTag desc), bindex tag = PB_IRTag elm /\
-                             PB_Message_tagToType tag = PB_IRType elm.
 
 Definition PB_IRElm_OK {n} (desc : PB_Message n) (elm : PB_IRElm) :=
   match PB_Message_boundedTag desc (PB_IRTag elm) with
@@ -590,7 +597,7 @@ Definition PB_IRVal_format
   fun elm => PB_Type_format (PB_IRType elm) (PB_IRVal elm).
 
 Definition PB_IRVal_decode {n} (desc : PB_Message n)
-           (t : PB_TagType) (wty : word 32)
+           (t : N) (wty : N)
   : DecodeM PB_IRElm ByteString :=
   fun b cd =>
     match PB_Message_boundedTag desc t with
@@ -606,7 +613,7 @@ Theorem PB_IRVal_decode_correct
         {n} (desc : PB_Message n)
         {P : CacheDecode -> Prop}
         (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b)))
-  : forall (t : PB_TagType) (wty : word 32),
+  : forall (t : N) (wty : N),
     CorrectDecoder _
                    (fun elm => PB_IRTag elm = t /\ PB_IRElm_OK desc elm)
                    (fun _ _ => True)
@@ -654,24 +661,45 @@ Proof.
   intros; f_equal; eapply PB_IRVal_format_eq; eauto.
 Qed.
 
-Theorem PB_IRVal_format_m8
+Theorem PB_IRVal_format_byte
   : forall d b ce ce',
     PB_IRVal_format d ce ↝ (b, ce') ->
     bin_measure b mod 8 = 0.
 Proof.
   unfold PB_IRVal_format. intros.
   destruct d.
-  eapply PB_Type_format_m8; eauto.
+  eapply PB_Type_format_byte; eauto.
 Qed.
 
 Definition PB_IRElm_format
   : FormatM PB_IRElm ByteString :=
-  fun elm => format_word (PB_IRTag elm)
-    ThenC format_word (natToWord 32 (PB_WireType_denote
-                                       (PB_Type_toWireType
-                                          (PB_IRType elm))))
+  fun elm =>
+    Varint_format (N.lor
+                     (N.shiftl (PB_IRTag elm) 3)
+                     (PB_WireType_denote (PB_Type_toWireType (PB_IRType elm))))
     ThenC PB_IRVal_format elm
     DoneC.
+
+Lemma N_shiftr_lor_shiftl
+  : forall a b n, N.lt (N.log2 b) n ->
+             a = N.shiftr (N.lor (N.shiftl a n) b) n.
+Proof.
+  intros. rewrite N.shiftr_lor.
+  rewrite N.shiftr_shiftl_r by apply N.le_refl.
+  rewrite (N.shiftr_eq_0 b); auto.
+  rewrite N.sub_diag.
+  symmetry.
+  apply N.lor_0_r.
+Qed.
+
+Lemma decides_N_eq
+  : forall (n n' : N),
+    decides (N.eqb n n') (n = n').
+Proof.
+  unfold decides, If_Then_Else; intros;
+    destruct (N.eqb_spec n n'); auto.
+Qed.
+Hint Resolve decides_N_eq : decide_data_invariant_db.
 
 Definition PB_IRElm_decoder {n} (desc : PB_Message n)
   : { decode : _ |
@@ -686,18 +714,21 @@ Proof.
   eexists.
   intros. eapply compose_format_correct;
   unfold cache_inv_Property; intuition.
+  apply Varint_decode_correct.
   decode_step idtac.
   decode_step idtac.
   decode_step idtac.
   intros. eapply compose_format_correct.
   unfold cache_inv_Property; intuition.
+  intros.
+  eapply (PB_IRVal_decode_correct desc)
+    with (t := N.shiftr proj 3)
+         (wty := N.land proj 7).
   decode_step idtac.
-  decode_step idtac.
-  decode_step idtac.
-  intros. eapply compose_format_correct.
-  unfold cache_inv_Property; intuition.
-  decode_step idtac.
-  intros; apply (PB_IRVal_decode_correct desc) with (t:=proj) (wty:=proj0).
+
+  intro. intros[? ?]. split; eauto. subst.
+  apply N_shiftr_lor_shiftl. apply PB_WireType_denote_3bits.
+
   all : decode_step idtac.
 Defined.
 
@@ -714,13 +745,13 @@ Theorem PB_IRElm_decode_lt {n} (desc : PB_Message n)
 Proof.
   intros.
   decode_opt_to_inv.
-  destruct (weqb _); inversion H2; clear H2. subst.
+  destruct (N.eqb _); inversion H1; clear H1. subst.
   edestruct (PB_IRVal_decode_correct desc (P := fun _ => True))
             as [_ Hd].
   unfold cache_inv_Property; intuition.
   edestruct Hd as [_ [? [_ [_ [Hm _]]]]]; try reflexivity; eauto. clear Hd.
-  subst. apply decode_word_lt in H. apply decode_word_lt in H0.
-  unfold lt_B in *. rewrite mappend_measure in H0.
+  subst. apply Varint_decode_lt in H.
+  unfold lt_B in *. rewrite mappend_measure in H.
   omega.
   Grab Existential Variables.
   auto.
@@ -733,15 +764,10 @@ Theorem PB_IRElm_format_eq
     b1 = b2.
 Proof.
   unfold PB_IRElm_format.
-  intros. unfold compose in *. unfold Bind2 in *.
-  computes_to_inv. f_equal. subst.
-  inversion H''. inversion H0''.
-  repeat match goal with
-  | H : format_word _ _ ↝ ?v |- _ => apply Return_inv in H; subst v
-  end.
-  unfold fst.
-  repeat progress f_equal.
-  destruct v9. destruct v3.
+  intros.
+  computes_to_inv2.
+  progress repeat f_equal.
+  eapply Varint_format_eq; eauto.
   eapply PB_IRVal_format_eq; eauto.
 Qed.
 
@@ -754,24 +780,19 @@ Proof.
   intros; f_equal; eapply PB_IRElm_format_eq; eauto.
 Qed.
 
-Theorem PB_IRElm_format_m8
+Theorem PB_IRElm_format_byte
   : forall d b ce ce',
     PB_IRElm_format d ce ↝ (b, ce') ->
     bin_measure b mod 8 = 0.
 Proof.
   unfold PB_IRElm_format. intros.
-  intros. unfold compose in *. unfold Bind2 in *.
-  computes_to_inv. destruct v, v0, v1, v2, v3, v4.
-  apply format_word_m8 in H; auto.
-  apply format_word_m8 in H'; auto.
-  apply PB_IRVal_format_m8 in H''0; auto.
-  inversion H''. inversion H''0'. inversion H''0'0'. inversion H''0'0.
+  intros. computes_to_inv2.
+  apply Varint_format_byte in H.
+  apply PB_IRVal_format_byte in H'; auto.
   repeat rewrite @mappend_measure.
-  rewrite Nat.add_mod.
-  rewrite (Nat.add_mod (_ b2) (_ + _)).
-  rewrite (Nat.add_mod (_ b4) (_ ByteString_id)).
-  rewrite H, H', H''0. auto.
-  all : auto.
+  rewrite Nat.add_mod; auto.
+  rewrite (Nat.add_mod (_ b1) (_ ByteString_id)); auto.
+  rewrite H, H'; auto.
 Qed.
 
 Definition PB_IR := list PB_IRElm.
@@ -795,9 +816,7 @@ Theorem PB_IR_format_eq
 Proof.
   unfold PB_IR_format. induction d; intros.
   - inversion H. inversion H0. reflexivity.
-  - unfold compose in *. unfold Bind2 in *.
-    computes_to_inv. destruct v, v0, v1, v2. simpl in *.
-    inversion H''. inversion H0''.
+  - computes_to_inv2.
     repeat progress f_equal.
     eapply PB_IRElm_format_eq; eauto.
     eauto.
@@ -870,38 +889,41 @@ Proof.
       auto.
     } {
       destruct H0 as [H1 H3]. specialize (H1 _ _ _ H2).
-      unfold Bind2 in H2; computes_to_inv. destruct v, v0.
-      simpl in H2', H2''. inversion H2''. subst bin xenv. clear H2''.
-      destruct (PB_IRElm_decode_correct desc) with (P:=P); auto.
-      clear H4. edestruct H0 with (ext:=mappend b0 ext) as [? [? [? ?]]]; eauto.
+      computes_to_inv2.
+      destruct (PB_IRElm_decode_correct desc) with (P:=P) as [He _]; auto.
+      edestruct He with (ext:=mappend b ext) as [? [? [? ?]]]; eauto.
       apply H3. intuition.
-      rewrite @mappend_measure in H1.
+      rewrite @mappend_measure.
       edestruct IHdata with (ext:=ext) as [? [? [? ?]]]; intros; eauto.
       split. intros.
       eapply PB_IR_format_sz_eq; eauto.
       intros. apply H3. intuition. clear IHdata.
       eexists; intuition; eauto.
       rewrite Coq.Init.Wf.Fix_eq by solve_extensionality; simpl.
-      destruct sz.
-      pose proof (PB_IRElm_decode_lt desc _ _ _ _ _ H4).
-      unfold lt_B in H10. repeat rewrite @mappend_measure in H10. omega.
+      match goal with
+      | _ : _ |- context [match ?a with _ => _ end] => destruct a eqn:?
+      end.
+      pose proof (PB_IRElm_decode_lt desc _ _ _ _ _ H0).
+      match goal with
+      | H : lt_B _ _ |- _ => unfold lt_B in H; repeat rewrite @mappend_measure in H; simpl in H
+      end; omega.
       edestruct @Decode_w_Measure_lt_eq
         with (A_decode_lt:=(PB_IRElm_decode_lt desc)).
-      unfold PB_IRElm_decode. apply H4.
-      revert x1 H10. rewrite mappend_assoc. intros.
-      simpl in H10. rewrite H10. simpl. clear x1 H10.
+      unfold PB_IRElm_decode. apply H0.
+      revert x1 H8. rewrite mappend_assoc. simpl. intros.
+      rewrite H8. simpl. clear x1 H8.
       destruct lt_dec.
-      repeat rewrite (@mappend_measure _ ByteStringQueueMonoid) in l.
+      repeat rewrite (@mappend_measure _ ByteStringQueueMonoid) in l. simpl in l.
       omega. repeat rewrite (@mappend_measure _ ByteStringQueueMonoid).
       match goal with
       | _ : _ |- context [Fix _ _ _ ?a _ _] => 
-        replace a with (bin_measure b0)
-      end. simpl in H7. simpl. rewrite H7. auto.
+        replace a with (bin_measure b)
+      end. simpl in H5. simpl. rewrite H5. auto.
       match goal with
       | _ : _ |- context [match ?a with _ => _ end] =>
-        replace a with (bin_measure b) by omega
+        replace a with (bin_measure b0) by omega
       end.
-      destruct (bin_measure b) eqn:Heq; omega.
+      destruct (bin_measure b0) eqn:Heq; simpl in *; omega.
     }
   } {
     generalize dependent env.
@@ -922,28 +944,28 @@ Proof.
       decode_opt_to_inv.
       destruct x0. simpl proj1_sig in H3.  simpl proj2_sig in H3.
       apply Decode_w_Measure_lt_eq_inv in H1. simpl in H1.
-      destruct (PB_IRElm_decode_correct desc) with (P:=P); auto. clear H4.
-      edestruct H5 as [? [? [? [? [? [? ?]]]]]]; eauto. clear H5.
+      destruct (PB_IRElm_decode_correct desc) with (P:=P) as [_ Hd]; auto.
+      edestruct Hd as [? [? [? [? [? [? ?]]]]]]; eauto. clear Hd.
       destruct lt_dec; try congruence.
       decode_opt_to_inv. subst.
       edestruct H. 3:eauto. unfold lt_B in l. omega. eauto. eauto.
-      destruct H12 as [? [? [? [? [[? ?] ?]]]]].
+      destruct H11 as [? [? [? [? [[? ?] ?]]]]].
       split; eauto. eexists _, _. repeat split.
       - computes_to_econstructor; eauto.
         computes_to_econstructor; eauto.
       - simpl fst. rewrite <- mappend_assoc. subst. auto.
-      - intros. unfold compose in H17. unfold Bind2 in H17.
+      - intros. unfold compose in H16. unfold Bind2 in H16.
         computes_to_inv. destruct v, v0. simpl fst in *. simpl snd in *.
-        inversion H17''. subst. clear H17''.
-        specialize (H14 _ _ _ H17'). rewrite @mappend_measure. rewrite H14.
-        repeat rewrite mappend_measure.
-        repeat rewrite mappend_measure in n0.
+        inversion H16''. subst. clear H16''.
+        specialize (H13 _ _ _ H16'). rewrite @mappend_measure. rewrite H13.
+        repeat rewrite @mappend_measure.
+        repeat rewrite @mappend_measure in n0.
         assert (bin_measure b0 = bin_measure x2). {
           eapply PB_IRElm_format_sz_eq; eauto.
         } omega.
-      - intros. destruct H17.
+      - intros. destruct H16.
         + subst. eauto.
-        + apply H15. eauto.
+        + apply H14. eauto.
     }
   }
 Qed.
@@ -1002,6 +1024,41 @@ Defined.
 
 Local Transparent computes_to.
 Local Transparent Pick.
+
+Lemma PB_Message_IR_Elm_OK {n} (desc : PB_Message n)
+      (HP : PB_Message_OK desc)
+      (msg : PB_Message_denote desc) (ir : PB_IR)
+      (ce ce' : CacheFormat)
+  : PB_Message_IR_format desc msg ce ↝ (ir, ce') ->
+    forall elm : PB_IRElm, In elm ir -> PB_IRElm_OK desc elm.
+Proof.
+  unfold PB_Message_IR_format. unfold computes_to. unfold Pick.
+  simpl. induction 1; intros; try easy.
+  destruct H0; auto. subst.
+  unfold PB_IRElm_OK. simpl. destruct PB_Message_boundedTag eqn:Hb.
+  - apply PB_Message_boundedTag_correct in Hb.
+    apply BoundedTag_inj in Hb; auto. subst. auto.
+  - contradiction (BoundedTag_in _ t).
+Qed.
+
+Lemma PB_Message_IR_decode_nil {n} (desc : PB_Message n)
+      (msg : PB_Message_denote desc) (ir ir' : PB_IR)
+      (cd cd' : CacheDecode)
+  : PB_Message_IR_decode desc ir cd = Some (msg, ir', cd') -> ir' = nil.
+Proof.
+  generalize dependent msg.
+  generalize dependent cd.
+  generalize dependent cd'.
+  induction ir; intros.
+  - inversion H. auto.
+  - simpl in H. destruct a.
+    decode_opt_to_inv.
+    destruct PB_Message_boundedTag; try easy.
+    destruct PB_Type_eq_dec; try easy.
+    inversion H0. subst.
+    eapply IHir; eauto.
+Qed.
+
 Theorem PB_Message_IR_decode_correct {n} (desc : PB_Message n)
         (HP : PB_Message_OK desc)
         {P : CacheDecode -> Prop}
@@ -1055,6 +1112,109 @@ Proof.
   }
   Grab Existential Variables. auto.
 Qed.
+
+Definition PB_Message_format {n} (desc : PB_Message n)
+  : FormatM (PB_Message_denote desc) ByteString :=
+  (fun msg ce =>
+     `(ir, ce') <- PB_Message_IR_format desc msg ce;
+       PB_IR_format (rev ir) ce')%comp.
+
+Definition PB_Message_decode {n} (desc : PB_Message n)
+  : DecodeM (PB_Message_denote desc) ByteString :=
+  fun b cd =>
+    `(ir, b', cd1) <- PB_IR_decode desc (bin_measure b) b cd;
+      `(msg, ir', cd2) <- PB_Message_IR_decode desc (rev ir) cd1;
+      Some (msg, b', cd2).
+
+Theorem PB_Message_decode_correct {n} (desc : PB_Message n)
+        (HP : PB_Message_OK desc)
+        {P : CacheDecode -> Prop}
+        (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b)))
+  : CorrectDecoder _
+                   (fun _ => True)
+                   (fun _ ext => ext = mempty)
+                   (PB_Message_format desc) (PB_Message_decode desc) P.
+Proof.
+  unfold PB_Message_format, PB_Message_decode.
+  split; intros. {
+    subst.
+    computes_to_inv2.
+    edestruct (PB_IR_decode_correct desc (P:=P)) as [He2 _]; eauto.
+    edestruct He2; try apply H3'; eauto.
+    split. {
+      intros. eapply PB_IR_format_sz_eq; eauto.
+    } {
+      intros. rewrite <- in_rev in *.
+      eapply PB_Message_IR_Elm_OK; eauto.
+    }
+    intuition. clear He2.
+    edestruct (PB_Message_IR_decode_correct desc) as [He1 _]; eauto.
+    edestruct He1; eauto. eauto. intuition. clear He1.
+    eexists. repeat split; eauto.
+    rewrite @mempty_right in *.
+    rewrite H3. simpl. rewrite rev_involutive.
+    rewrite H6. simpl. eauto.
+  } {
+    decode_opt_to_inv. subst.
+    edestruct (PB_Message_IR_decode_correct desc) as [_ Hd1]; eauto.
+    edestruct Hd1 as [? [? [? [? [? [? ?]]]]]]; try apply H2; eauto.
+    edestruct (PB_IR_decode_correct desc (P:=P)) as [_ Hd2]; eauto.
+    edestruct Hd2 as [? [? [? [? [? [? ?]]]]]]; try apply H1; eauto.
+    edestruct (PB_IR_decode_correct desc (P:=P)) as [_ Hd2]; eauto.
+    edestruct Hd2 as [? [? [? [? [? [? ?]]]]]]; try apply H1; eauto.
+
+    subst. split; eauto. eexists _, _. repeat split; eauto.
+    computes_to_econstructor; eauto. simpl.
+    assert (x3 = nil) by (eapply PB_Message_IR_decode_nil; eauto).
+    subst. rewrite @mempty_right in *. subst.
+    rewrite rev_involutive. eauto.
+  }
+Qed.
+
+Definition CorrectDecoderFor' {A B} {cache : Cache}
+           {monoid : Monoid B} Invariant FormatSpec :=
+  { decodePlusCacheInv : _ |
+    exists P_inv,
+    (cache_inv_Property (snd decodePlusCacheInv) P_inv
+     -> CorrectDecoder (A := A) monoid Invariant (fun _ ext => ext = mempty)
+                                FormatSpec
+                                (fst decodePlusCacheInv)
+                                (snd decodePlusCacheInv))
+    /\ cache_inv_Property (snd decodePlusCacheInv) P_inv}%type.
+
+Lemma Start_CorrectDecoderFor'
+      {A B} {cache : Cache}
+      {monoid : Monoid B}
+      Invariant
+      FormatSpec
+      (decoder decoder_opt : B -> CacheDecode -> option (A * B * CacheDecode))
+      (cache_inv : CacheDecode -> Prop)
+      (P_inv : (CacheDecode -> Prop) -> Prop)
+      (decoder_OK :
+         cache_inv_Property cache_inv P_inv
+         -> CorrectDecoder (A := A) monoid Invariant (fun _ ext => ext = mempty)
+                                    FormatSpec decoder cache_inv)
+      (cache_inv_OK : cache_inv_Property cache_inv P_inv)
+      (decoder_opt_OK : forall b cd, decoder b cd = decoder_opt b cd)
+  : @CorrectDecoderFor' A B cache monoid Invariant FormatSpec.
+Proof.
+  exists (decoder_opt, cache_inv); exists P_inv; split; simpl; eauto.
+  unfold CorrectDecoder in *; intuition; intros.
+  - destruct (H1 _ _ _ _ _ ext env_OK H0 H3 H4 H5).
+    rewrite decoder_opt_OK in H6; eauto.
+  - rewrite <- decoder_opt_OK in H4; destruct (H2 _ _ _ _ _ _ H0 H3 H4); eauto.
+  - rewrite <- decoder_opt_OK in H4; destruct (H2 _ _ _ _ _ _ H0 H3 H4); eauto.
+Defined.
+
+Definition PB_Message_decoder {n} (desc : PB_Message n)
+           (HP : PB_Message_OK desc)
+  : CorrectDecoderFor' (fun _ => True) (PB_Message_format desc).
+Proof.
+  eapply Start_CorrectDecoderFor'.
+  - intros. apply PB_Message_decode_correct; eauto.
+  - cbv beta; synthesize_cache_invariant.
+  - cbv beta; optimize_decoder_impl.
+Defined.
 
 (* Example *)
 Open Scope Tuple.

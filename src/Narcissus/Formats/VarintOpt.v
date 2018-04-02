@@ -9,6 +9,7 @@ Require Import
         Fiat.Computation.FixComp
         Fiat.Narcissus.Common.Specs
         Fiat.Narcissus.Common.WordFacts
+        Fiat.Narcissus.Common.ComposeOpt
         Fiat.Narcissus.Formats.WordOpt
         Fiat.Narcissus.Formats.InternetChecksum.
 
@@ -47,6 +48,16 @@ Ltac solve_extensionality :=
   | H : forall a1 a2, ?f a1 a2 = ?g a1 a2 |- _ => solve_extensionality' f g 2%nat
   | H : forall a1 a2 a3, ?f a1 a2 a3 = ?g a1 a2 a3 |- _ => solve_extensionality' f g 3%nat
   end.
+
+Ltac computes_to_inv2 :=
+  unfold compose, Bind2 in *; computes_to_inv;
+  repeat match goal with
+         | v : _ * _ |- _ => destruct v
+         end;
+  simpl fst in *; simpl snd in *;
+  repeat match goal with
+         | H : (_, _) = (_, _) |- _ => inversion H; subst; clear H
+         end.
 
 Lemma div_eucl_mod
   : forall a b q r, N.div_eucl a b = (q, r) -> r = a mod b.
@@ -244,9 +255,7 @@ Section Varint.
         pose proof (N.div_eucl_spec data (2^7)).
         rewrite Hdiv in H6. rewrite H6. auto.
       } {
-        unfold compose in *. unfold Bind2 in *.
-        computes_to_inv. destruct v, v0. simpl fst in *. simpl snd in *.
-        inversion H2''. clear H2''. subst.
+        computes_to_inv2.
         edestruct He as [? [? [? ?]]]; eauto.
         edestruct H as [? [? [? ?]]]; try apply H2'; eauto.
         eapply div_eucl_div_lt; eauto; try easy.
@@ -333,4 +342,104 @@ Section Varint.
     }
   Qed.
 
+  Lemma Varint_decode_lt
+    : forall (b : B) (cd : CacheDecode) (a : N)
+        (b' : B) (cd' : CacheDecode),
+      Varint_decode b cd = Some (a, b', cd') -> lt_B b' b.
+  Proof.
+    unfold Varint_decode. intros.
+    generalize dependent cd.
+    generalize dependent cd'.
+    generalize dependent a.
+    induction b using (well_founded_ind well_founded_lt_b); intros.
+    rewrite Coq.Init.Wf.Fix_eq in H0 by solve_extensionality.
+    decode_opt_to_inv. destruct x1.
+    apply Decode_w_Measure_lt_eq_inv in H0. simpl in H0.
+    destruct N.ltb. {
+      inversion H1. subst. auto.
+    } {
+      decode_opt_to_inv. destruct x3; try easy.
+      inversion H2. clear H2. subst.
+      unfold lt_B in *. eapply lt_trans.
+      eapply (H x1); eauto. eauto.
+    }
+  Qed.
+
+  Theorem Varint_format_eq
+    : forall d b1 b2 ce1 ce1' ce2 ce2',
+      Varint_format d ce1 ↝ (b1, ce1') ->
+      Varint_format d ce2 ↝ (b2, ce2') ->
+      b1 = b2.
+  Proof.
+    unfold Varint_format. simpl.
+    induction d using (well_founded_ind N.lt_wf_0); intros.
+    apply (unroll_LeastFixedPoint Varint_body_monotone) in H0.
+    apply (unroll_LeastFixedPoint Varint_body_monotone) in H1.
+    unfold Varint_body in *.
+    destruct N.div_eucl eqn:Hdiv. destruct n. {
+      repeat match goal with
+             | H : format_word _  _ ↝ _ |- _ => inversion H; subst; clear H
+             end; eauto.
+    } {
+      computes_to_inv2.
+      f_equal.
+      - repeat match goal with
+               | H : format_word _  _ ↝ _ |- _ => inversion H; subst; clear H
+               end; eauto.
+      - eapply H; eauto. eapply div_eucl_div_lt; eauto; try easy.
+        destruct d; easy.
+    }
+  Qed.
+
 End Varint.
+
+Require Import
+        Fiat.Narcissus.BinLib.AlignedByteString
+        Fiat.Narcissus.Stores.EmptyStore.
+
+Local Open Scope nat.
+
+Lemma format_word_sz n (w : word n)
+  : forall ce ce' b,
+    format_word w ce ↝ (b, ce') ->
+    bin_measure b = n.
+Proof.
+  induction w; intros; inversion H; subst; clear H.
+  - auto.
+  - rewrite (@measure_enqueue _ _ _ ByteString_QueueMonoidOpt).
+    simpl B_measure. rewrite Nat.add_1_r. f_equal.
+    apply (IHw ce' ce'). apply ReturnComputes.
+Qed.
+
+Theorem format_word_byte n (w : word n)
+  : forall ce ce' b,
+    n mod 8 = 0 ->
+    format_word w ce ↝ (b, ce') ->
+    bin_measure b mod 8 = 0.
+Proof.
+  intros. erewrite format_word_sz; eauto.
+Qed.
+
+Theorem Varint_format_byte
+  : forall d b ce ce',
+    Varint_format d ce ↝ (b, ce') ->
+    bin_measure b mod 8 = 0.
+Proof.
+  induction d using (well_founded_ind N.lt_wf_0); intros.
+  apply (unroll_LeastFixedPoint Varint_body_monotone) in H0.
+  unfold Varint_body in *.
+  destruct N.div_eucl eqn:Hdiv. destruct n. {
+    eapply format_word_byte; eauto; try easy.
+  } {
+    computes_to_inv2.
+    rewrite @mappend_measure.
+    rewrite Nat.add_mod; try easy.
+    match goal with
+    | _ : _ |- ?a mod _ = 0 => replace a with 0
+    end; try easy.
+    erewrite format_word_byte; eauto; try easy.
+    symmetry. eapply H; eauto.
+    eapply div_eucl_div_lt; eauto; try easy.
+    destruct d; easy.
+  }
+Qed.
