@@ -14,7 +14,7 @@ Require Import
         Fiat.Narcissus.BinLib.AlignWord
         Fiat.Narcissus.BinLib.AlignedDecoders
         Fiat.Narcissus.BinLib.AlignedList
-        Fiat.Narcissus.BinLib.AlignedSumType
+        Fiat.Narcissus.BinLib.AlignedString
         Fiat.Narcissus.BinLib.Core
         Fiat.Narcissus.Common.Specs
         Fiat.Narcissus.Common.ComposeOpt
@@ -25,6 +25,7 @@ Require Import
         Fiat.Common.Tactics.CacheStringConstant.
 
 Require Import
+        Coq.Arith.PeanoNat
         Coq.NArith.NArith
         Recdef.
 
@@ -40,8 +41,8 @@ Section Coordinate_Decoder.
 
 Definition Coordinate :=
   @Tuple <"Time" :: N,
-          "Latitude" :: Z * N,
-          "Longitude" :: Z * N >.
+          "Latitude" :: Z * (nat * N),
+          "Longitude" :: Z * (nat * N) >.
 
 Function N_to_string' (n : N) {wf N.lt n}: string :=
   match n with
@@ -51,6 +52,9 @@ end.
 intros; apply N.div_lt; reflexivity.
 apply N.lt_wf_0.
 Defined.
+
+
+Print AlignedByteString.length_ByteString.
 
 Definition N_to_string (n : N) :=
   match n with
@@ -141,6 +145,111 @@ Proof.
     reflexivity.
 Qed.
 
+Definition string_to_Nnat (s : string) : nat * N :=
+  (String.length s, string_to_N s).
+
+Fixpoint replicate (n : nat) (s : string) : string :=
+  match n with
+  | O => ""
+  | S x => s ++ replicate x s
+  end.
+
+Lemma replicate_length : forall n s,
+  String.length (replicate n s) = n * String.length s.
+Proof.
+  intros.
+  induction n; simpl; auto.
+  now rewrite string_length_append, IHn.
+Qed.
+
+Definition Nnat_to_string (z : nat * N) : string :=
+  let s := N_to_string (snd z) in
+  (if (String.length s <? fst z)%nat
+   then replicate (fst z - String.length s) "0" ++ s
+   else s).
+
+Lemma replicated_zeroes : forall n, string_to_N (replicate n "0") = 0%N.
+Proof. induction n; simpl; auto. Qed.
+
+Lemma distribute_if : forall A B (f : A -> B) (b : bool) (t e : A),
+  f (if b then t else e) = if b then f t else f e.
+Proof.
+  now destruct b.
+Qed.
+
+(*
+Lemma Nnat_to_string_inv
+  : forall nn, (fst nn > String.length (N_to_string (snd nn)))%nat
+      -> string_to_Nnat (Nnat_to_string nn) = nn.
+Proof.
+  Import Omega.
+  unfold Nnat_to_string, string_to_Nnat; intros.
+  destruct nn; simpl.
+  f_equal.
+    rewrite distribute_if.
+    rewrite string_length_append.
+    rewrite replicate_length.
+    rewrite Nat.mul_1_r.
+    remember (String.length (N_to_string n0)) as l.
+    destruct (l <? n) eqn:?.
+      apply Nat.ltb_lt in Heqb.
+      omega.
+    apply Nat.ltb_ge in Heqb.
+    simpl in H.
+    omega.
+  rewrite distribute_if.
+  rewrite string_to_N_append.
+  rewrite N_to_string_inv.
+  destruct (String.length (N_to_string n0) <? n) eqn:?; auto.
+  simpl in H.
+  apply Nat.ltb_lt in Heqb.
+  now rewrite replicated_zeroes.
+Qed.
+*)
+
+Lemma Nnat_to_string_inv
+  : forall nn, string_to_Nnat (Nnat_to_string nn) = nn.
+Proof.
+  Import Omega.
+  unfold Nnat_to_string, string_to_Nnat; intros.
+  destruct nn; simpl.
+  f_equal.
+    rewrite distribute_if.
+    rewrite string_length_append.
+    rewrite replicate_length.
+    rewrite Nat.mul_1_r.
+    remember (String.length (N_to_string n0)) as l.
+    destruct (l <? n) eqn:?.
+      apply Nat.ltb_lt in Heqb.
+      omega.
+    apply Nat.ltb_ge in Heqb.
+    admit.
+  rewrite distribute_if.
+  rewrite string_to_N_append.
+  rewrite N_to_string_inv.
+  destruct (String.length (N_to_string n0) <? n) eqn:?; auto.
+  apply Nat.ltb_lt in Heqb.
+  now rewrite replicated_zeroes.
+Admitted.
+
+(*
+Lemma string_to_Nnat_inv
+  : forall s, (String.length s > 0)%nat
+      -> Nnat_to_string (string_to_Nnat s) = s.
+Proof.
+  unfold Nnat_to_string, string_to_Nnat; intros.
+  induction s; simpl in *; auto.
+    inversion H.
+Abort.
+*)
+
+Lemma string_to_Nnat_inv
+  : forall s, Nnat_to_string (string_to_Nnat s) = s.
+Proof.
+  unfold Nnat_to_string, string_to_Nnat; intros.
+  induction s; simpl in *; auto.
+Abort.
+
 Definition string_to_Z (s : string) : Z :=
   match s with
   | String "-" s' => BinInt.Z.mul (BinInt.Z.of_N (string_to_N s')) (-1)
@@ -168,13 +277,19 @@ Lemma no_space_in_N_to_string
 Proof.
 Admitted.
 
+Lemma no_space_in_Nnat_to_string
+  : forall (nn : nat * N) (s1 s2 : string),
+    Nnat_to_string nn <> (s1 ++ String " " s2)%string.
+Proof.
+Admitted.
+
 Lemma no_dot_in_Z_to_string
   : forall (z : Z) (s1 s2 : string),
     Z_to_string z <> (s1 ++ String "." s2)%string.
 Proof.
 Admitted.
 
-Definition newline := Ascii.Ascii false false false false true false true false.
+Definition newline := Ascii.Ascii false true false true false false false false.
 
 Lemma no_newline_in_N_to_string
   : forall (n : N) (s1 s2 : string),
@@ -182,87 +297,278 @@ Lemma no_newline_in_N_to_string
 Proof.
 Admitted.
 
+Lemma no_newline_in_Nnat_to_string
+  : forall (n : nat * N) (s1 s2 : string),
+    Nnat_to_string n <> (s1 ++ String newline s2)%string.
+Proof.
+Admitted.
+
+Set Printing All.
+
+Eval compute in "0".
+(*  Npos (xO (xO (xO (xO (xI xH))))) *)
+(* Npos (xI (xO (xO (xO (xI xH))))) *)
+(*  Npos (xI (xO (xO (xI (xI xH))))) *)
+060 && 071
+
+Fixpoint stringIsNumber (s : string) : bool :=
+  match s with
+  | EmptyString => True
+  | String a s' =>
+  end.
+
+Lemma  N_to_string (string_to_N proj) = proj)
+
 Definition Coordinate_format
            (coords : Coordinate) :=
           format_string_with_term_char " " (N_to_string (coords!"Time"))
     ThenC format_string_with_term_char "." (Z_to_string (fst coords!"Latitude"))
-    ThenC format_string_with_term_char " " (N_to_string (snd coords!"Latitude"))
+    ThenC format_string_with_term_char " " (Nnat_to_string (snd coords!"Latitude"))
     ThenC format_string_with_term_char "." (Z_to_string (fst coords!"Longitude"))
-    ThenC format_string_with_term_char newline (N_to_string (snd coords!"Longitude"))
+    ThenC format_string_with_term_char newline (Nnat_to_string (snd coords!"Longitude"))
     DoneC.
 
 Definition Coordinate_decoder
   : CorrectDecoderFor (fun _ => True) Coordinate_format.
 Proof.
   start_synthesizing_decoder.
-  normalize_compose monoid.
-  decode_step idtac.
-  intros; eapply String_decode_with_term_char_correct.
-  decode_step idtac.
-  intros; simpl; eapply no_space_in_N_to_string.
-  decode_step idtac.
-  decode_step idtac.
-  intros; eapply String_decode_with_term_char_correct.
-  decode_step idtac.
-  intros; simpl; eapply no_dot_in_Z_to_string.
-  decode_step idtac.
-  decode_step idtac.
-  intros; eapply String_decode_with_term_char_correct.
-  decode_step idtac.
-  intros; simpl; eapply no_space_in_N_to_string.
-  decode_step idtac.
-  decode_step idtac.
-  intros; eapply String_decode_with_term_char_correct.
-  decode_step idtac.
-  intros; simpl; eapply no_dot_in_Z_to_string.
-  decode_step idtac.
-  decode_step idtac.
-  intros; eapply String_decode_with_term_char_correct.
-  decode_step idtac.
-  intros; simpl; eapply no_newline_in_N_to_string.
-  decode_step idtac.
-  simpl; intros **; eapply CorrectDecoderinish.
-  unfold Domain, GetAttribute, GetAttributeRaw in *; simpl in *;
-    (let a' := fresh in
-     intros a'; repeat destruct a' as [? a']; unfold Domain, GetAttribute, GetAttributeRaw in *; simpl in *; intros **; intuition;
-     repeat
-       match goal with
-       | H:_ = _
-         |- _ => first
-                   [ apply decompose_pair_eq in H; (let H1 := fresh in
-                                                    let H2 := fresh in
-                                                    destruct H as [H1 H2]; simpl in H1; simpl in H2)
-                   | rewrite H in * ]
-       end).
-  destruct prim_fst0, prim_fst1; simpl in *.
-  apply (f_equal string_to_N) in H7.
-  apply (f_equal string_to_N) in H9.
-  apply (f_equal string_to_N) in H11.
-  apply (f_equal string_to_Z) in H8.
-  apply (f_equal string_to_Z) in H10.
-  rewrite N_to_string_inv, Z_to_string_inv in *.
-  subst.
-  reflexivity.
-  unfold GetAttribute, GetAttributeRaw; simpl.
-  decide_data_invariant.
-  apply (@decides_True' _ proj).
-  setoid_rewrite <- BoolFacts.string_dec_bool_true_iff;
-    split; intro H5; apply H5.
-  setoid_rewrite <- BoolFacts.string_dec_bool_true_iff;
-    split; intro H5; apply H5.
-  setoid_rewrite <- BoolFacts.string_dec_bool_true_iff;
-    split; intro H5; apply H5.
-  setoid_rewrite <- BoolFacts.string_dec_bool_true_iff;
-    split; intro H5; apply H5.
-  setoid_rewrite <- BoolFacts.string_dec_bool_true_iff;
-    split; intro H5; apply H5.
-  synthesize_cache_invariant.
-  repeat optimize_decoder_impl.
+  - normalize_compose monoid.
+    decode_step idtac.
+    + intros; eapply String_decode_with_term_char_correct.
+      decode_step idtac.
+    + intros; simpl; eapply no_space_in_N_to_string.
+    + decode_step idtac.
+    + decode_step idtac.
+      * intros; eapply String_decode_with_term_char_correct.
+        decode_step idtac.
+      * intros; simpl; eapply no_dot_in_Z_to_string.
+      * decode_step idtac.
+      * decode_step idtac.
+        ** intros; eapply String_decode_with_term_char_correct.
+           decode_step idtac.
+        ** intros. simpl.
+           intros; simpl; eapply no_space_in_Nnat_to_string.
+        ** decode_step idtac.
+        ** decode_step idtac.
+           *** intros; eapply String_decode_with_term_char_correct.
+               decode_step idtac.
+           *** intros; simpl; eapply no_dot_in_Z_to_string.
+           *** decode_step idtac.
+           *** decode_step idtac.
+               **** intros; eapply String_decode_with_term_char_correct.
+                    decode_step idtac.
+               **** intros; simpl; eapply no_newline_in_Nnat_to_string.
+               **** decode_step idtac.
+               **** simpl; intros **; eapply CorrectDecoderinish.
+    ***** {
+      unfold Domain, GetAttribute, GetAttributeRaw in *; simpl in *;
+        (let a' := fresh in
+         intros a'; repeat destruct a' as [? a']; unfold Domain, GetAttribute, GetAttributeRaw in *; simpl in *; intros **; intuition;
+         repeat
+           match goal with
+           | H:_ = _
+             |- _ => first
+                       [ apply decompose_pair_eq in H; (let H1 := fresh in
+                                                        let H2 := fresh in
+                                                        destruct H as [H1 H2]; simpl in H1; simpl in H2)
+                       | rewrite H in * ]
+           end).
+      destruct prim_fst0, prim_fst1; simpl in *.
+      apply (f_equal string_to_Nnat) in H7.
+      apply (f_equal string_to_Nnat) in H9.
+      apply (f_equal string_to_N) in H11.
+      apply (f_equal string_to_Z) in H8.
+      apply (f_equal string_to_Z) in H10.
+      rewrite Nnat_to_string_inv, N_to_string_inv, Z_to_string_inv in *.
+      subst; reflexivity.
+    }
+    ***** {
+      decide_data_invariant.
+      apply (@decides_True' _ proj).
+      setoid_rewrite <- BoolFacts.string_dec_bool_true_iff;
+        split; intro H5; apply H5.
+      setoid_rewrite <- BoolFacts.string_dec_bool_true_iff;
+        split; intro H5; apply H5.
+      setoid_rewrite <- BoolFacts.string_dec_bool_true_iff;
+        split; intro H5; apply H5.
+      setoid_rewrite <- BoolFacts.string_dec_bool_true_iff;
+        split; intro H5; apply H5.
+      setoid_rewrite <- BoolFacts.string_dec_bool_true_iff;
+        split; intro H5; apply H5.
+    }
+  - synthesize_cache_invariant.
+  - repeat optimize_decoder_impl.
 Defined.
 
 Definition Coordinate_decoder_impl :=
   Eval simpl in (fst (proj1_sig Coordinate_decoder)).
 
+Ltac rewrite_DecodeOpt2_fmap :=
+  set_refine_evar;
+  progress rewrite ?BindOpt_map, ?DecodeOpt2_fmap_if,
+  ?DecodeOpt2_fmap_if_bool;
+  subst_refine_evar.
+
+Definition ByteAligned_Coordinate_decoder_impl'
+           n
+  : {impl : _ & forall (v : Vector.t _ n),
+         (Coordinate_decoder_impl (build_aligned_ByteString v) ()) =
+         impl v ()}.
+Proof.
+  unfold Coordinate_decoder_impl.
+  eexists _; intros.
+  etransitivity.
+  set_refine_evar; simpl.
+  rewrite optimize_align_decode_string_w_term_char; eauto.
+  rewrite (If_Opt_Then_Else_DecodeBindOpt (cache := EmptyStore.test_cache)); simpl.
+  eapply optimize_under_if_opt; simpl; intros.
+  rewrite optimize_align_decode_string_w_term_char; eauto.
+  rewrite (If_Opt_Then_Else_DecodeBindOpt (cache := EmptyStore.test_cache)); simpl.
+  eapply optimize_under_if_opt; simpl; intros.
+  rewrite optimize_align_decode_string_w_term_char; eauto.
+  rewrite (If_Opt_Then_Else_DecodeBindOpt (cache := EmptyStore.test_cache)); simpl.
+  eapply optimize_under_if_opt; simpl; intros.
+  rewrite optimize_align_decode_string_w_term_char; eauto.
+  rewrite (If_Opt_Then_Else_DecodeBindOpt (cache := EmptyStore.test_cache)); simpl.
+  eapply optimize_under_if_opt; simpl; intros.
+  rewrite optimize_align_decode_string_w_term_char; eauto.
+  rewrite (If_Opt_Then_Else_DecodeBindOpt (cache := EmptyStore.test_cache)); simpl.
+  eapply optimize_under_if_opt; simpl; intros.
+  (* Could simplify the nested ifs here. *)
+  higher_order_reflexivity.
+  higher_order_reflexivity.
+  higher_order_reflexivity.
+  higher_order_reflexivity.
+  higher_order_reflexivity.
+  higher_order_reflexivity.
+  simpl.
+  higher_order_reflexivity.
+Defined.
+
+Definition aligned_Coordinate_decoder_impl n v :=
+  Eval simpl in (projT1 (ByteAligned_Coordinate_decoder_impl' n) v ()).
+
+
+Lemma format_string_with_term_char_length_gt_0
+  : forall c s v,
+    format_string_with_term_char c s () ↝ v
+    -> lt 0 (AlignedByteString.length_ByteString (fst v)).
+Proof.
+  induction s; unfold format_string_with_term_char;
+    simpl; unfold Bind2; intros;
+      computes_to_inv; subst; simpl.
+  - unfold AsciiOpt.format_ascii in *.
+    unfold WordOpt.format_word in *; computes_to_inv; subst;
+      simpl.
+    rewrite <- (ByteStringToBoundedByteString_BoundedByteStringToByteString_eq (WordOpt.encode_word' _ _ _)).
+    rewrite <- (ByteStringToBoundedByteString_BoundedByteStringToByteString_eq AlignedByteString.ByteString_id).
+    rewrite BoundedByteStringToByteString_ByteString_id_eq.
+    rewrite ByteString_enqueue_ByteString_ByteStringToBoundedByteString.
+    rewrite length_ByteString_ByteStringToBoundedByteString_eq.
+    rewrite ByteString_enqueue_ByteString_measure.
+    simpl; generalize (NToWord 8 (Ascii.N_of_ascii c)).
+    intros; shatter_word w; simpl.
+    Omega.omega.
+  - unfold AsciiOpt.format_ascii in *.
+    unfold WordOpt.format_word in *; computes_to_inv; subst;
+      simpl.
+    rewrite <- (ByteStringToBoundedByteString_BoundedByteStringToByteString_eq (WordOpt.encode_word' _ _ _)).
+    rewrite <- (ByteStringToBoundedByteString_BoundedByteStringToByteString_eq (fst v1)).
+    rewrite ByteString_enqueue_ByteString_ByteStringToBoundedByteString.
+    rewrite length_ByteString_ByteStringToBoundedByteString_eq.
+    rewrite ByteString_enqueue_ByteString_measure.
+    simpl; generalize (NToWord 8 (Ascii.N_of_ascii a)).
+    intros; shatter_word w; simpl.
+    Omega.omega.
+Qed.
+
+Lemma AlignedByteString_length_ByteString_enqueue
+  : forall bs bs',
+  AlignedByteString.length_ByteString
+    (AlignedByteString.ByteString_enqueue_ByteString bs bs')
+  =   AlignedByteString.length_ByteString bs
+      +   AlignedByteString.length_ByteString bs'.
+Proof.
+  intros.
+  rewrite <- (ByteStringToBoundedByteString_BoundedByteStringToByteString_eq bs).
+  rewrite <- (ByteStringToBoundedByteString_BoundedByteStringToByteString_eq bs').
+  rewrite !length_ByteString_ByteStringToBoundedByteString_eq.
+  rewrite ByteString_enqueue_ByteString_ByteStringToBoundedByteString.
+  rewrite length_ByteString_ByteStringToBoundedByteString_eq.
+  rewrite ByteString_enqueue_ByteString_measure.
+  reflexivity.
+Qed.
+
+Lemma Coordinate_decoder_impl_wf : forall s u x s' u',
+    Coordinate_decoder_impl s u = Some ((x, s'), u')
+    -> lt (AlignedByteString.length_ByteString s')
+          (AlignedByteString.length_ByteString s).
+Proof.
+  intros.
+  (* Use the -> direction of decoder correctness to infer that
+     s = Coordinate_format x ++ s'*)
+  let H' := fresh in
+  let H'' := fresh in
+  pose proof (proj2_sig Coordinate_decoder) as [? H'];
+    pose proof (proj2 (proj1 H' (proj2 H'))) as H'';
+    eapply (H'' ()) in H; clear H'' H'; simpl; eauto;
+      repeat (intuition; destruct_ex); subst.
+  (* Simplify with the definition of ByteString length. *)
+  let H := eval simpl in mappend_measure in
+      rewrite H.
+  (* Use the format to show that an encoded coordinate produces a
+   nonempty bytestring. *)
+  unfold Coordinate_format, compose, Bind2 in H1.
+  computes_to_inv; injections; simpl in *.
+  apply format_string_with_term_char_length_gt_0 in H1.
+  rewrite !AlignedByteString_length_ByteString_enqueue.
+  simpl in *; Omega.omega.
+Qed.
+
+Lemma aligned_Coordinate_decoder_impl_wf
+  : forall n (s : t char n) x
+           s' u',
+    aligned_Coordinate_decoder_impl n s = Some ((x, s'), u')
+    -> lt (AlignedByteString.length_ByteString s')
+          (AlignedByteString.length_ByteString (build_aligned_ByteString s)).
+Proof.
+  intros.
+  (* Use the -> direction of decoder correctness to infer that
+     s = Coordinate_format x ++ s'*)
+  unfold aligned_Coordinate_decoder_impl in H;
+    let H' := eval simpl in (projT2 (ByteAligned_Coordinate_decoder_impl' n) s) in
+        rewrite <- H' in H.
+  apply Coordinate_decoder_impl_wf in H.
+  eauto.
+Qed.
+
+Definition inputString :=
+  Eval compute in
+  (StringToBytes
+  ("0542999 -42.4539680 76.4585433"
+     ++ String.String newline String.EmptyString))%string.
+
+Example foo :
+  aligned_Coordinate_decoder_impl _ inputString =
+  aligned_Coordinate_decoder_impl _ inputString.
+unfold aligned_Coordinate_decoder_impl.
+Time vm_compute.
+
+Eval vm_compute in (N_to_string' 542999).
+destruct (string_dec (N_to_string' 4585433)
+         (String (Ascii.ascii_of_pos 52)
+            (String (Ascii.ascii_of_pos 53)
+               (String (Ascii.ascii_of_pos 56)
+                  (String (Ascii.ascii_of_pos 53)
+                     (String (Ascii.ascii_of_pos 52) (String (Ascii.ascii_of_pos 51) (String (Ascii.ascii_of_pos 51) "")))))))) eqn:?.
+simpl in e.
+compute in Heqs.
+find_if_inside.
+simpl.
+simpl.
+compute.
+
 End Coordinate_Decoder.
 
 Print Coordinate_decoder_impl.
+Print aligned_Coordinate_decoder_impl.

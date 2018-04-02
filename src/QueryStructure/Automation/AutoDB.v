@@ -1061,8 +1061,6 @@ Ltac find_equivalent_search_term build_search_term :=
                                                                                               simpl in *; rewrite <- eqv; simpl; reflexivity
                         ]))) end.
 
-
-
 Ltac convert_filter_to_find' :=
   try match goal with
         |- context[filter (fun a => (_ && _) && true) _] =>
@@ -1080,6 +1078,7 @@ Ltac convert_filter_to_find' :=
       pose proof (@refine_Query_For_In_Find_single _ _ _ r_o r_n H idx st resultComp filter_rest) as b;
         simpl in b; setoid_rewrite b; clear b
     end
+
 
   | H : @DelegateToBag_AbsR ?qs_schema ?indices ?r_o ?r_n
     |- context[l <- CallBagEnumerate ?idx ?r_n;
@@ -1104,8 +1103,8 @@ Ltac convert_filter_to_find' :=
     |- context[l <- CallBagFind ?idx ?r_n ?st;
                 l' <- Join_Comp_Lists (Build_single_Tuple_list (snd l))
                    (fun _ : ilist (@RawTuple) [?heading] =>
-                      l <- CallBagEnumerate ?idx' ?r_n;
-                    ret (snd l));
+                      l'' <- CallBagEnumerate ?idx' ?r_n;
+                    ret (snd l''));
                 List_Query_In (filter (fun a => @?f a && @?filter_rest a) l') ?resultComp] =>
     match f with
     | fun a => ?MatchIndexSearchTerm (Dep_SearchTerm_Wrapper ?st' (ilist2_hd (ilist2_tl a)))
@@ -1347,7 +1346,7 @@ Ltac implement_Insert_branches :=
   | (* Refine the then branch *)
   repeat match goal with
          | [ H : DelegateToBag_AbsR ?r_o ?r_n
-             |- context[idx <- {idx | UnConstrFreshIdx (GetUnConstrRelation ?r_o ?TableID) idx};
+             |- context[idx <- {idx' | UnConstrFreshIdx (GetUnConstrRelation ?r_o ?TableID) idx'};
                          {r_n' |
                           DelegateToBag_AbsR
                             (UpdateUnConstrRelation ?r_o ?TableID
@@ -1359,7 +1358,7 @@ Ltac implement_Insert_branches :=
 
          | [ H : DelegateToBag_AbsR ?r_o ?r_n
 
-             |- context[idx <- {idx | UnConstrFreshIdx (GetUnConstrRelation ?r_o ?TableID) idx};
+             |- context[idx <- {idx' | UnConstrFreshIdx (GetUnConstrRelation ?r_o ?TableID) idx'};
                          {r_n' |
                           DelegateToBag_AbsR
                             (UpdateUnConstrRelation ?r_o ?TableID
@@ -1375,7 +1374,7 @@ Ltac implement_Insert_branches :=
   | (* Refine the else branch *)
   repeat match goal with
          | [ H : DelegateToBag_AbsR ?r_o ?r_n
-             |- context[{idx | UnConstrFreshIdx (GetUnConstrRelation ?r_o ?TableID) idx} >>
+             |- context[{idx' | UnConstrFreshIdx (GetUnConstrRelation ?r_o ?TableID) idx'} >>
                                                                                          {r_n' | DelegateToBag_AbsR ?r_o r_n'}] ]
            => let H' := fresh in
               pose proof H as H';
@@ -2230,7 +2229,8 @@ Ltac Implement_Nested_Query_In :=
   end.
 
 Ltac implement_bag_methods :=
-  etransitivity;
+  etransitivity; set_refine_evar;
+  unfold CallBagFind;
   [ repeat (first [
                 simpl; simplify with monad laws
               | remove_spurious_Dep_Type_BoundedIndex_nth_eq
@@ -2253,7 +2253,7 @@ Ltac implement_bag_methods :=
                 unfold CallBagImplMethod; cbv beta; simpl;
                 try remove_spurious_Dep_Type_BoundedIndex_nth_eq
           end);
-  higher_order_reflexivity.
+  finish honing.
 
 Ltac implement_TopMost_Query' k k_dep:=
   Focused_refine_TopMost_Query;
