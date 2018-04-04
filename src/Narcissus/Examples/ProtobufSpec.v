@@ -1221,12 +1221,12 @@ Open Scope Tuple.
 Import Vectors.VectorDef.VectorNotations.
 
 Notation "'PB_MESSAGE_TAG' t" :=
-  (@Build_BoundedIndex _ _ _ (natToWord 32 t%nat) _)
+  (@Build_BoundedIndex _ _ _ t%N _)
     (at level 70).
 
 Definition PersonMessage : PB_Message _ :=
-  [{| PB_FieldType := PB_Singular PB_fixed64; PB_FieldName := "id"; PB_FieldTag := (natToWord 32 1) |};
-     {| PB_FieldType := PB_Singular PB_fixed32; PB_FieldName := "age"; PB_FieldTag := (natToWord 32 2) |}].
+  [{| PB_FieldType := PB_Singular PB_fixed64; PB_FieldName := "id"; PB_FieldTag := 1 |};
+     {| PB_FieldType := PB_Singular PB_fixed32; PB_FieldName := "age"; PB_FieldTag := 2 |}].
 Definition PersonFieldId := PersonMessage[@Fin.F1].
 Definition PersonFieldAge := PersonMessage[@Fin.FS Fin.F1].
 
