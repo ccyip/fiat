@@ -1217,30 +1217,30 @@ Proof.
 Defined.
 
 (* Example *)
-Open Scope Tuple.
-Import Vectors.VectorDef.VectorNotations.
+(* Open Scope Tuple. *)
+(* Import Vectors.VectorDef.VectorNotations. *)
 
-Notation "'PB_MESSAGE_TAG' t" :=
-  (@Build_BoundedIndex _ _ _ t%N _)
-    (at level 70).
+(* Notation "'PB_MESSAGE_TAG' t" := *)
+(*   (@Build_BoundedIndex _ _ _ t%N _) *)
+(*     (at level 70). *)
 
-Definition PersonMessage : PB_Message _ :=
-  [{| PB_FieldType := PB_Singular PB_fixed64; PB_FieldName := "id"; PB_FieldTag := 1 |};
-     {| PB_FieldType := PB_Singular PB_fixed32; PB_FieldName := "age"; PB_FieldTag := 2 |}].
-Definition PersonFieldId := PersonMessage[@Fin.F1].
-Definition PersonFieldAge := PersonMessage[@Fin.FS Fin.F1].
+(* Definition PersonMessage : PB_Message _ := *)
+(*   [{| PB_FieldType := PB_Singular PB_fixed64; PB_FieldName := "id"; PB_FieldTag := 1 |}; *)
+(*      {| PB_FieldType := PB_Singular PB_fixed32; PB_FieldName := "age"; PB_FieldTag := 2 |}]. *)
+(* Definition PersonFieldId := PersonMessage[@Fin.F1]. *)
+(* Definition PersonFieldAge := PersonMessage[@Fin.FS Fin.F1]. *)
 
-Compute (PB_Message_denote PersonMessage).
+(* Compute (PB_Message_denote PersonMessage). *)
 
-Definition person : PB_Message_denote PersonMessage :=
-  ilist.Build_prim_prod (natToWord 64 4)
-                        (ilist.Build_prim_prod (natToWord 32 27) tt).
-Definition def_person := PB_Message_default PersonMessage.
+(* Definition person : PB_Message_denote PersonMessage := *)
+(*   ilist.Build_prim_prod (natToWord 64 4) *)
+(*                         (ilist.Build_prim_prod (natToWord 32 27) tt). *)
+(* Definition def_person := PB_Message_default PersonMessage. *)
 
-Compute person!"id".
-Compute def_person!"id".
-Compute (@PB_Message_tagToIndex _ PersonMessage (PB_MESSAGE_TAG 1)).
-Compute (@PB_Message_tagToType _ PersonMessage (PB_MESSAGE_TAG 2)).
+(* Compute person!"id". *)
+(* Compute def_person!"id". *)
+(* Compute (@PB_Message_tagToIndex _ PersonMessage (PB_MESSAGE_TAG 1)). *)
+(* Compute (@PB_Message_tagToType _ PersonMessage (PB_MESSAGE_TAG 2)). *)
 
-Compute (PB_Message_lookup person (PB_MESSAGE_TAG 2)).
-Compute (PB_Message_update person (PB_MESSAGE_TAG 2) (natToWord 32 3)).
+(* Compute (PB_Message_lookup person (PB_MESSAGE_TAG 2)). *)
+(* Compute (PB_Message_update person (PB_MESSAGE_TAG 2) (natToWord 32 3)). *)

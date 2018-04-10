@@ -320,6 +320,7 @@ src/Narcissus/BinLib/AlignedList.v
 src/Narcissus/BinLib/AlignedMonads.v
 src/Narcissus/BinLib/AlignedString.v
 src/Narcissus/BinLib/AlignedSumType.v
+src/Narcissus/BinLib/AlignedVarint.v
 src/Narcissus/BinLib/CharString.v
 src/Narcissus/BinLib/Core.v
 src/Narcissus/Common/Compose.v
@@ -338,6 +339,8 @@ src/Narcissus/Examples/IntExample.v
 src/Narcissus/Examples/Toy.v
 src/Narcissus/Examples/Toy2.v
 src/Narcissus/Examples/ProtobufSpec.v
+src/Narcissus/Examples/AlignedProtobuf.v
+src/Narcissus/Examples/ProtobufExtract.v
 src/Narcissus/Examples/BRASS/Telemetry.v
 src/Narcissus/Examples/DNS/DNSPacket.v
 src/Narcissus/Examples/DNS/DnsOpt.v
