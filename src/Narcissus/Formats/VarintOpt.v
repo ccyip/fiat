@@ -28,25 +28,21 @@ Ltac decode_opt_to_inv :=
          | H : Some (_, _, _) = _ |- _ => symmetry in H
          end.
 
-Ltac solve_by_extensionality n :=
-  match n with
-  | O => idtac
-  | S ?n' => 
-    let a := fresh "a" in
-    extensionality a; solve_by_extensionality n'
-  end; auto.
+Ltac solve_by_extensionality :=
+  repeat let a := fresh in
+         extensionality a; auto.
 
-Ltac solve_extensionality' f g n :=
-  replace g with f by (solve_by_extensionality n);
+Ltac solve_extensionality' f g :=
+  replace g with f by solve_by_extensionality;
   auto.
 
 (* :TODO: *)
 Ltac solve_extensionality :=
   intros;
   match goal with
-  | H : forall a1, ?f a1 = ?g a1 |- _ => solve_extensionality' f g 1%nat
-  | H : forall a1 a2, ?f a1 a2 = ?g a1 a2 |- _ => solve_extensionality' f g 2%nat
-  | H : forall a1 a2 a3, ?f a1 a2 a3 = ?g a1 a2 a3 |- _ => solve_extensionality' f g 3%nat
+  | H : forall a1, ?f a1 = ?g a1 |- _ => solve_extensionality' f g
+  | H : forall a1 a2, ?f a1 a2 = ?g a1 a2 |- _ => solve_extensionality' f g
+  | H : forall a1 a2 a3, ?f a1 a2 a3 = ?g a1 a2 a3 |- _ => solve_extensionality' f g
   end.
 
 Ltac computes_to_inv2 :=
