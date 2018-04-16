@@ -25,10 +25,6 @@ Section AlignedVarint.
 
   (* :TODO: <+- -> bitwise operations *)
 
-  (* :Q: *)
-  (* recursion on monad context *)
-  (* recursion on dual (idx) *)
-
   Lemma nth_opt_lt {A : Set} {n} (v : Vector.t A n) m (a : A)
     : nth_opt v m = Some a -> (m < n)%nat.
   Proof.
@@ -45,7 +41,7 @@ Section AlignedVarint.
     inversion H. pose proof (nth_opt_lt _ _ _ Heqo). omega.
   Qed.
 
-  Definition AlignedVarint_decode
+  Definition Aligned_Varint_decode
              {n : nat}
     : AlignedDecodeM N n.
   Proof.
@@ -75,15 +71,14 @@ Section AlignedVarint.
     eapply GetCurrentByte_lt; eauto.
   Defined.
 
-  (* :Q: function that given type a /\ b, return type a? *)
-  Lemma AlignedDecodeVarintM1
+  Lemma Aligned_Varint_decodeM1
     : forall numBytes_hd n (v : Vector.t _ (S numBytes_hd)) cd,
-      AlignedVarint_decode v (S n) cd =
-      Ifopt AlignedVarint_decode (Vector.tl v) n cd as a
+      Aligned_Varint_decode v (S n) cd =
+      Ifopt Aligned_Varint_decode (Vector.tl v) n cd as a
       Then Some (fst (fst a), S (snd (fst a)), snd a) Else None.
   Proof.
     intros.
-    unfold AlignedVarint_decode.
+    unfold Aligned_Varint_decode.
     generalize dependent numBytes_hd; eapply Vector.caseS; simpl; intros.
     generalize dependent cd.
     induction n using (well_founded_ind (Nat.gt_wf n0)); intros.
@@ -100,17 +95,17 @@ Section AlignedVarint.
   Local Arguments N.add : simpl never.
   Local Arguments N.mul : simpl never.
   Local Arguments Nat.sub : simpl never.
-  Lemma AlignedDecodeVarintM
+  Lemma Aligned_Varint_decodeM
     : DecodeMEquivAlignedDecodeM
-        Varint_decode (fun numBytes => AlignedVarint_decode).
+        Varint_decode (fun numBytes => Aligned_Varint_decode).
   Proof.
     unfold DecodeMEquivAlignedDecodeM.
     split; [| split]; intros.
-    - apply AlignedDecodeVarintM1.
+    - apply Aligned_Varint_decodeM1.
     - apply Varint_decode_lt in H. unfold lt_B in H. simpl in H.
       omega.
     - unfold Varint_decode.
-      unfold AlignedVarint_decode.
+      unfold Aligned_Varint_decode.
       generalize dependent cd.
       induction v; intros. {
         split. {
@@ -139,7 +134,7 @@ Section AlignedVarint.
           intros. inversion H3. subst. rewrite <- H5. auto.
         } {
           edestruct IHv.
-          pose proof AlignedDecodeVarintM1. unfold AlignedVarint_decode in H6.
+          pose proof Aligned_Varint_decodeM1. unfold Aligned_Varint_decode in H6.
           rewrite H6. simpl.
           unfold decode_word in Heqo.
           destruct decode_word' eqn:?; try easy.
