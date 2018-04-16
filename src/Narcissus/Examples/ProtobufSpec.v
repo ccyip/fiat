@@ -95,6 +95,8 @@ Qed.
 Inductive PB_SingularType : Set :=
 | PB_fixed32 : PB_SingularType
 | PB_fixed64 : PB_SingularType
+| PB_int32 : PB_SingularType
+| PB_int64 : PB_SingularType
 (* | PB_sfixed32 : PB_SingularType *)
 (* | PB_sfixed64 : PB_SingularType *)
 (* | PB_bool : PB_SingularType *)
@@ -105,6 +107,10 @@ Definition PB_SingularType_denote (sty : PB_SingularType) : Type :=
    match sty with
    | PB_fixed32 => word 32
    | PB_fixed64 => word 64
+   (* :TODO: use word 32/64 later *)
+   (* :TODO: combinator for function composition? *)
+   | PB_int32 => N
+   | PB_int64 => N
   end.
 
 Definition PB_SingularType_format (sty : PB_SingularType)
@@ -112,6 +118,8 @@ Definition PB_SingularType_format (sty : PB_SingularType)
   match sty with
   | PB_fixed32 => format_word
   | PB_fixed64 => format_word
+  | PB_int32 => Varint_format
+  | PB_int64 => Varint_format
   end.
 
 Definition PB_SingularType_decoder
@@ -132,11 +140,14 @@ Proof.
 
   intros; destruct sty; simpl;
     repeat decode_step idtac.
+  all : apply Varint_decode_correct.
+  all : repeat decode_step idtac.
 Defined.
 
 Definition PB_SingularType_decode (sty : PB_SingularType) :=
   Eval simpl in proj1_sig (PB_SingularType_decoder sty).
 
+(* :TODO: don't simply theorem and make them opaque. *)
 Definition PB_SingularType_decode_correct (sty : PB_SingularType) :=
   Eval simpl in proj2_sig (PB_SingularType_decoder sty).
 
@@ -152,6 +163,7 @@ Proof.
            | H : format_word _  _ ↝ _ |- _ => inversion H; subst; clear H
            end;
     auto.
+  all : eapply Varint_format_eq; eauto.
 Qed.
 
 Theorem PB_SingularType_format_sz_eq (sty : PB_SingularType)
@@ -170,7 +182,8 @@ Theorem PB_SingularType_format_byte (sty : PB_SingularType)
 Proof.
   unfold PB_SingularType_format.
   destruct sty; intros;
-    eapply format_word_byte; eauto; eauto.
+    solve [eapply format_word_byte; eauto; eauto |
+           eapply Varint_format_byte; eauto; eauto].
 Qed.
 
 Inductive PB_Type : Set :=
@@ -256,6 +269,8 @@ Definition PB_Type_default (ty : PB_Type) : PB_Type_denote ty :=
   | PB_Singular sty => match sty with
                       | PB_fixed32 => wzero 32
                       | PB_fixed64 => wzero 64
+                      | PB_int32 => 0%N
+                      | PB_int64 => 0%N
                       end
   end.
 
@@ -264,6 +279,8 @@ Definition PB_Type_toWireType (ty : PB_Type) : PB_WireType :=
   | PB_Singular sty => match sty with
                           | PB_fixed32 => PB_32bit
                           | PB_fixed64 => PB_64bit
+                          | PB_int32 => PB_Varint
+                          | PB_int64 => PB_Varint
                           end
   end.
 
@@ -701,6 +718,7 @@ Proof.
 Qed.
 Hint Resolve decides_N_eq : decide_data_invariant_db.
 
+Local Arguments CacheDecode : simpl never.
 Definition PB_IRElm_decoder {n} (desc : PB_Message n)
   : { decode : _ |
       forall {P : CacheDecode -> Prop}
@@ -838,19 +856,17 @@ Proof.
     (Fix lt_wf _
          (fun sz decode =>
             fun b cd =>
-              match sz return (forall y, lt y sz -> _) -> _ with
-              | O => fun _ => Some (nil, b, cd)
-              | S sz' => fun decode =>
-                          `(elm, b1, cd1) <- Decode_w_Measure_lt (PB_IRElm_decode desc) b cd _;
-                          if lt_dec (S sz') (bin_measure b - bin_measure (proj1_sig b1)) then
-                            None
-                          else
-                            `(ir, b2, cd2) <- decode ((S sz') - (bin_measure b - bin_measure (proj1_sig b1))) _ (proj1_sig b1) cd1;
-                          Some (elm :: ir, b2, cd2)
-              end decode)).
-  apply PB_IRElm_decode_lt.
-  abstract (destruct b1; unfold lt_B in *;
-            simpl proj1_sig; omega).
+              match sz with
+              | O => Some (nil, b, cd)
+              | S _ => `(elm, b1, cd1) <- Decode_w_Measure_lt (PB_IRElm_decode desc) b cd _;
+                        if lt_dec sz (bin_measure b - bin_measure (proj1_sig b1)) then
+                          None
+                        else
+                          `(ir, b2, cd2) <- decode (sz - (bin_measure b - bin_measure (proj1_sig b1))) _ (proj1_sig b1) cd1;
+                        Some (elm :: ir, b2, cd2)
+              end)).
+  - apply PB_IRElm_decode_lt.
+  - destruct b1. unfold lt_B in l. simpl in *. abstract omega.
 Defined.
 
 Theorem PB_IR_decode_correct {n} (desc : PB_Message n)
