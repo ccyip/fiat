@@ -474,88 +474,143 @@ Proof.
             repeat progress f_equal.
             apply le_uniqueness_proof.
           }
-          destruct (H (S n1 - n2)) as [_ [_ [? ?]]].
-          omega.
+
+          edestruct H1; eauto. destruct H4.
+          inversion H3. clear H3.
+          assert (build_aligned_ByteString
+                    (eq_rect n0 (t (word 8)) v (n0 - numBytes b + numBytes b) L2) =
+                  build_aligned_ByteString (append x0 (byteString b))) as L4. {
+            rewrite <- L2. simpl.
+            pose proof H4. apply build_aligned_ByteString_split' in H4.
+            destruct H4. rewrite H3. rewrite L at 2.
+            rewrite build_aligned_ByteString_append. auto.
+          }
+
           repeat match goal with
           | |- context [Fix ?a ?b ?c ?d ?e] => destruct (Fix a b c d e) eqn:?
           end; try do 2 destruct p2; try do 2 destruct p1;
             simpl. {
+            destruct (H (S n1 - n2)) as [_ [_ [? ?]]].
+            omega.
             split. split; easy.
-            intros. inversion H5; clear H5; subst.
-            edestruct H1; eauto. inversion H5; clear H5; subst.
-            assert (numBytes bs' <= numBytes b) as L4. {
+            intros. inversion H9; clear H9; subst.
+            assert (numBytes bs' <= numBytes b) as L5. {
               apply PB_IR_decode_le in Heqo0.
               unfold le_B in Heqo0. simpl in Heqo0.
               unfold length_ByteString in Heqo0.
               omega.
             }
-            rewrite L in Heqo0.
-            edestruct H4; eauto. simpl.
+            edestruct H5; eauto. simpl.
             match goal with
             | H : Fix _ _ _ ?a1 _ _ = _ |- Fix _ _ _ ?a2 _ _ = _ =>
                replace a2 with a1
             end.
-            apply Heqo0. unfold length_ByteString. simpl. omega.
-            (* :Q: very slow omega. *)
-            destruct H6, H7.
+            rewrite <- L. apply Heqo0. unfold length_ByteString. simpl.
+            (* :Q: very slow omega. ring? *)
+            (* omega. *)
+            rewrite L3. unfold Nat.add. rewrite <- !Nat.mul_sub_distr_l.
+            reflexivity.
+            destruct H7.
             eapply (proper_consumer_t_Some _ (Aligned_PB_IR_decodeM1 desc _)
                                            (eq_rect _ _ v _ L2))
-              in H5.
-            unfold Aligned_PB_IR_decode in H5. simpl in H5.
-            rewrite <- L2 in H5. simpl in H5.
+              in H6. 2 : apply L4.
+            unfold Aligned_PB_IR_decode in H6. simpl in H6.
+            rewrite <- L2 in H6. simpl in H6.
             rewrite Nat.sub_0_r in Heqa0.
-            rewrite Heqa0 in H5. inversion H5; clear H5; subst.
+            rewrite Heqa0 in H6. inversion H6; clear H6; subst.
             split.
             - do 3 f_equal. omega.
             - assert (n0 - numBytes b + (numBytes b - numBytes bs') =
-                      n0 - numBytes bs') as L5. {
+                      n0 - numBytes bs') as L6. {
                 omega.
               }
-              exists (eq_rect _ _ (Vector.append x0 x1) _ L5).
-              rewrite <- L5. simpl. rewrite build_aligned_ByteString_append.
-              rewrite H6. rewrite <- (@mappend_assoc _ ByteStringQueueMonoid).
+              exists (eq_rect _ _ (Vector.append x0 x1) _ L6).
+              rewrite <- L6. simpl. rewrite build_aligned_ByteString_append.
+              rewrite H4. rewrite <- (@mappend_assoc _ ByteStringQueueMonoid).
               simpl. rewrite <- H7. rewrite <- L. auto.
-            - rewrite <- L2. simpl. instantiate (1 := x0).
-              pose proof H6. apply build_aligned_ByteString_split' in H8.
-              destruct H8. rewrite H6. rewrite L at 2.
-              rewrite build_aligned_ByteString_append. auto.
           } {
             exfalso.
+            destruct (H (S n1 - n2)) as [_ [_ [? ?]]].
+            omega.
+            edestruct H5; eauto. simpl.
+            match goal with
+            | H : Fix _ _ _ ?a1 _ _ = _ |- Fix _ _ _ ?a2 _ _ = _ =>
+               replace a2 with a1
+            end.
+            rewrite <- L. apply Heqo0. unfold length_ByteString. simpl.
+            (* omega. *)
+            subst. rewrite L3. unfold Nat.add. rewrite <- !Nat.mul_sub_distr_l.
+            reflexivity.
+            destruct H10.
+            eapply (proper_consumer_t_Some _ (Aligned_PB_IR_decodeM1 desc _)
+                                           (eq_rect _ _ v _ L2))
+              in H9. 2 : apply L4.
+            rewrite <- L2 in H9. unfold Aligned_PB_IR_decode in H9. simpl in H9.
+            subst n2. rewrite Nat.sub_0_r in Heqa0. rewrite Heqa0 in H9. easy.
+          } {
+            exfalso.
+            destruct (H (S n1 - n2)) as [_ [_ [? _]]].
+            omega.
+            rewrite <- L in H3. subst.
+            match goal with
+            | H1 : Fix _ _ _ ?a1 _ _ = _,
+                  H2 : Fix _ _ _ ?a2 _ _ = None <-> _ |- _ =>
+              replace a2 with a1 in H2
+            end.
+            apply H3 in Heqo0. clear H3.
+            eapply (proper_consumer_t_None _ (Aligned_PB_IR_decodeM1 desc _)
+                                           (eq_rect _ _ v _ L2))
+              in Heqo0. 2 : apply L4.
+            rewrite Nat.sub_0_r in Heqa0. 
+            revert Heqo0.
+            unfold Aligned_PB_IR_decode. simpl.
+            rewrite <- L2. simpl. rewrite Heqa0. easy.
+            unfold length_ByteString. simpl.
+            rewrite L3. unfold Nat.add. rewrite <- !Nat.mul_sub_distr_l.
+            reflexivity.
+          } {
+            split; easy.
           }
         }
       } {
+        simpl. clear H.
+        eapply Decode_w_Measure_lt_eq' in Heqo.
+        rewrite Heqo. rewrite Heqa.
+        simpl. split; easy.
       }
     }
+Qed.
 
-
-Lemma Aligned_PB_Message_M' {n} (desc : PB_Message n)
+Lemma Aligned_PB_Message_decodeM' {n} (desc : PB_Message n)
   : {impl : _ | DecodeMEquivAlignedDecodeM (PB_Message_decode desc) impl}.
 Proof.
   eexists; intros.
   unfold PB_Message_decode.
-  apply Bind_DecodeMEquivAlignedDecodeM.
-  (* { *)
-  (*   admit. *)
-  (* } { *)
-  Focus 2.
+  apply Bind_DecodeMEquivAlignedDecodeM. {
+    instantiate (1 := fun numBytes v idx c =>
+                        Aligned_PB_IR_decode desc (numBytes - idx) v idx c).
+    unfold DecodeMEquivAlignedDecodeM. split; [| split]; intros.
+    - edestruct (Aligned_PB_IR_decodeM desc) as [? _].
+      rewrite Nat.sub_succ. apply H.
+    - eapply PB_IR_decode_le; eauto.
+    - simpl. unfold length_ByteString. simpl. rewrite Nat.add_0_l.
+      rewrite Nat.sub_0_r.
+      edestruct (Aligned_PB_IR_decodeM desc) as [_ [_ ?]].
+      apply H.
+  } {
     intros.
-    match goal with
-    | |- _ (fun b c => @?p b c) _ => idtac p
-    end.
-    (* :TODO: trans *)
-    let f := constr:
-             (fun cd =>
-                match PB_Message_IR_decode desc (rev a) cd with
-                | Some (msg, _, cd') => Some (msg, cd')
-                | None => None
-                end)
-    in
-    let g := constr:(fun (b : ByteString) c => `(a, cd') <- f c; Some (a, b, cd')) in
-    match goal with
-    | |- _ ?a _ => replace a with g
-    end.
+    eapply DecodeMEquivAlignedDecodeM_trans.
     apply Compose_DecodeMEquivAlignedDecodeM.
-    solve_by_extensionality. destruct PB_Message_IR_decode; eauto.
-    repeat destruct p; eauto.
+    intros.
+    instantiate (1 := (fun cd =>
+                         match PB_Message_IR_decode desc (rev a) cd with
+                         | Some (msg, _, cd') => Some (msg, cd')
+                         | None => None
+                         end)).
+    simpl. destruct PB_Message_IR_decode; eauto. repeat destruct p; eauto.
+    intros. apply AlignedDecodeMEquiv_refl.
   }
-Qed.
+Defined.
+
+Definition Aligned_PB_Message_decode {n} (desc : PB_Message n) :=
+  Eval simpl in proj1_sig (Aligned_PB_Message_decodeM' desc).
