@@ -6,7 +6,7 @@ Set Implicit Arguments.
 Definition Vector_caseS'
            {A'} (Q : nat -> Type)
            (P : forall {n} (v : Vector.t A' (S n)), Q n -> Type)
-           (H : forall h {n} t q, @P n (h :: t) q) {n} (v: Vector.t A' (S n))
+           (H : forall h {n} (t : Vector.t A' n) q, @P n (h :: t) q) {n} (v: Vector.t A' (S n))
            (q : Q n)
 : P v q.
 Proof.
