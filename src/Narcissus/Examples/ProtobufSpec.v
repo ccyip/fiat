@@ -688,6 +688,10 @@ Proof.
   eapply PB_Type_format_byte; eauto.
 Qed.
 
+Local Arguments N.shiftl : simpl never.
+Local Arguments N.shiftr : simpl never.
+Local Arguments N.lor : simpl never.
+Local Arguments N.land : simpl never.
 Definition PB_IRElm_format
   : FormatM PB_IRElm ByteString :=
   fun elm =>

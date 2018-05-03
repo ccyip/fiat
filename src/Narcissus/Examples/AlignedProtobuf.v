@@ -193,6 +193,10 @@ Proof.
   apply (proj2_sig (Aligned_PB_IRVal_decodeM' desc t wty)).
 Qed.
 
+Local Arguments N.shiftl : simpl never.
+Local Arguments N.shiftr : simpl never.
+Local Arguments N.lor : simpl never.
+Local Arguments N.land : simpl never.
 Definition Aligned_PB_IRElm_decodeM' {n} (desc : PB_Message n)
   : {impl : _ | DecodeMEquivAlignedDecodeM (PB_IRElm_decode desc) impl}.
 Proof.
