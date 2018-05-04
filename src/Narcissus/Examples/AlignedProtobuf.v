@@ -5,6 +5,7 @@ Require Import
 Require Import
         Coq.Logic.Eqdep_dec
         Fiat.Computation
+        Fiat.CommonEx
         Fiat.Narcissus.Common.Specs
         Fiat.Narcissus.Common.WordFacts
         Fiat.Narcissus.Common.Compose

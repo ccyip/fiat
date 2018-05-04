@@ -3,6 +3,7 @@ Require Import
         Coq.ZArith.BinInt
         Coq.omega.Omega
         Fiat.Common
+        Fiat.CommonEx
         Fiat.Common.Frame
         Fiat.Computation.Core
         Fiat.Computation.Notations
@@ -75,7 +76,6 @@ Lemma div_eucl_mod_lt_sz'
   : forall a sz q r, N.div_eucl a (2^(N.of_nat sz)) = (q, r) ->
                 r < Npow2 (S sz).
 Proof.
-  (* :Q: better way? *)
   intros. unfold Npow2. fold Npow2.
   apply N.lt_trans with (m := Npow2 sz). eauto.
   rewrite <- Npow2_N.
@@ -94,7 +94,6 @@ Proof.
   intros. unfold Npow2. fold Npow2.
   rewrite Npow2_N.
   pose proof (div_eucl_mod_lt_sz _ _ _ _ H).
-  (* :Q: ring? *)
   replace 2 with (N.succ 1) by auto.
   rewrite N.mul_succ_l.
   rewrite N.mul_1_l.
@@ -167,7 +166,6 @@ Section Varint.
     monotonic_function Varint_body.
   Proof.
     unfold monotonic_function. simpl. intros.
-    (* :Q: morphism *)
     destruct N.div_eucl as [q r] eqn:Hdiv.
     destruct q. reflexivity.
     apply SetoidMorphisms.refine_bind. reflexivity.
@@ -190,7 +188,6 @@ Section Varint.
     unfold Varint_format, Varint_decode, Varint_body.
     destruct (Word_decode_correct (sz := 8) (P := P)) as [He Hd]; eauto.
     split; intros. {
-      (* :Q: how to apply least fixed point induction. *)
       clear H0 H1 Hd.
       generalize dependent bin.
       generalize dependent ext.
@@ -231,7 +228,6 @@ Section Varint.
         rewrite (proj2 (N.ltb_ge _ _))
           by (rewrite N.add_comm; apply N.le_add_r).
         rewrite H5.
-        (* :Q: control simpl granularity *)
         unfold DecodeBindOpt2, BindOpt, If_Opt_Then_Else.
         repeat progress f_equal.
         pose proof (N.div_eucl_spec data (2^7)).

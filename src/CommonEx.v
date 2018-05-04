@@ -6,7 +6,8 @@ Require Import
 Require Import
         Fiat.Computation
         Fiat.Computation.Core
-        Fiat.Narcissus.Common.Specs.
+        Fiat.Narcissus.Common.Specs
+        Fiat.Narcissus.Common.ComposeOpt.
 
 Ltac solve_by_extensionality :=
   repeat let a := fresh in
@@ -40,7 +41,7 @@ Ltac computes_to_inv2 :=
          end;
   simpl fst in *; simpl snd in *;
   repeat match goal with
-         | H : (_, _) = (_, _) |- _ => inversion_clear H; subst
+         | H : (_, _) = (_, _) |- _ => inversion H; clear H; subst
          end.
 
 Ltac fill_ind_h' t f :=

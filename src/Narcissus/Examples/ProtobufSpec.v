@@ -9,6 +9,8 @@ Require Import
         Fiat.QueryStructure.Specification.Representation.Notations
         Fiat.QueryStructure.Specification.Representation.Heading
         Fiat.QueryStructure.Specification.Representation.Tuple
+        Fiat.Common
+        Fiat.CommonEx
         Fiat.Common.BoundedLookup
         Fiat.Common.DecideableEnsembles
         Fiat.Common.EnumType
