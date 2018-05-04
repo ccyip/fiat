@@ -39,33 +39,6 @@ Require Import
         Fiat.Narcissus.Stores.EmptyStore
         Fiat.Narcissus.Automation.Solver.
 
-Ltac fill_ind_h' t f :=
-  match t with
-  | (_ -> ?t') => fill_ind_h' t' uconstr:(f _)
-  | _ => f
-  end.
-Ltac fill_ind_h f :=
-  let t := type of f in
-  fill_ind_h' t f.
-
-Ltac existT_eq_dec :=
-    match goal with
-    | [ H : existT _ _ _ = existT _ _ _ |- _ ] =>
-      apply inj_pair2_eq_dec in H;
-      try apply Nat.eq_dec
-    end.
-
-Ltac gen_eq_rect :=
-  match goal with
-  | _ : _ |- context [eq_rect _ _ _ _ ?e] => generalize e; try destruct 0
-  end.
-
-Definition type_cast {A B : Type} (pf : A = B) (v : A) : B.
-Proof.
-  rewrite <- pf.
-  exact v.
-Defined.
-
 Local Arguments natToWord : simpl never.
 Local Arguments NToWord : simpl never.
 Local Arguments wordToN : simpl never.

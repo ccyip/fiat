@@ -19,42 +19,6 @@ Import FixComp.LeastFixedPointFun.
 Local Open Scope N.
 Local Open Scope comp_scope.
 
-(* :TODO: move these somewhere else. *)
-Ltac decode_opt_to_inv :=
-  repeat match goal with
-         | H : _ = Some (_, _, _) |- _ =>
-           apply DecodeBindOpt2_inv in H; destruct H as [? [? [? [? ?]]]]
-         | H : Some (_, _, _) = Some (_, _, _) |- _ => inversion H; clear H
-         | H : Some (_, _, _) = _ |- _ => symmetry in H
-         end.
-
-Ltac solve_by_extensionality :=
-  repeat let a := fresh in
-         extensionality a; auto.
-
-Ltac solve_extensionality' f g :=
-  replace g with f by solve_by_extensionality;
-  auto.
-
-(* :TODO: *)
-Ltac solve_extensionality :=
-  intros;
-  match goal with
-  | H : forall a1, ?f a1 = ?g a1 |- _ => solve_extensionality' f g
-  | H : forall a1 a2, ?f a1 a2 = ?g a1 a2 |- _ => solve_extensionality' f g
-  | H : forall a1 a2 a3, ?f a1 a2 a3 = ?g a1 a2 a3 |- _ => solve_extensionality' f g
-  end.
-
-Ltac computes_to_inv2 :=
-  unfold compose, Bind2 in *; computes_to_inv;
-  repeat match goal with
-         | v : _ * _ |- _ => destruct v
-         end;
-  simpl fst in *; simpl snd in *;
-  repeat match goal with
-         | H : (_, _) = (_, _) |- _ => inversion H; subst; clear H
-         end.
-
 Lemma div_eucl_mod
   : forall a b q r, N.div_eucl a b = (q, r) -> r = a mod b.
 Proof.
