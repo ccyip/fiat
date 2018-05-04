@@ -5,6 +5,7 @@ src/ADTInduction.v
 src/ADTNotation.v
 src/ADTRefinement.v
 src/Common.v
+src/CommonEx.v
 src/Computation.v
 src/ComputationalEnsembles.v
 src/FiniteSetADTs.v
