@@ -30,6 +30,7 @@ Require Import
         Fiat.Narcissus.BinLib.AlignedDecoders
         Fiat.Narcissus.Formats.Option
         Fiat.Narcissus.Formats.FixListOpt
+        Fiat.Narcissus.Formats.SizedListOpt
         Fiat.Narcissus.Formats.Bool
         Fiat.Narcissus.Formats.WordOpt
         Fiat.Narcissus.Formats.NatOpt
@@ -794,177 +795,6 @@ Qed.
 
 Definition PB_IR := list PB_IRElm.
 
-Definition PB_IR_format
-  : FormatM PB_IR ByteString :=
-  fix format ir ce :=
-    match ir with
-    | nil => ret (mempty, ce)
-    | elm :: ir' => 
-      `(b1, ce1) <- PB_IRElm_format elm ce;
-        `(b2, ce2) <- format ir' ce1;
-        ret (mappend b1 b2, ce2)
-    end%comp.
-
-Theorem PB_IR_format_eq
-  : forall d b1 b2 ce1 ce1' ce2 ce2',
-    PB_IR_format d ce1 ↝ (b1, ce1') ->
-    PB_IR_format d ce2 ↝ (b2, ce2') ->
-    b1 = b2.
-Proof.
-  unfold PB_IR_format. induction d; intros.
-  - inversion H. inversion H0. reflexivity.
-  - computes_to_inv2.
-    repeat progress f_equal.
-    eapply PB_IRElm_format_eq; eauto.
-    eauto.
-Qed.
-
-Theorem PB_IR_format_sz_eq
-  : forall d b1 b2 ce1 ce1' ce2 ce2',
-    PB_IR_format d ce1 ↝ (b1, ce1') ->
-    PB_IR_format d ce2 ↝ (b2, ce2') ->
-    bin_measure b1 = bin_measure b2.
-Proof.
-  intros; f_equal; eapply PB_IR_format_eq; eauto.
-Qed.
-
-Definition PB_IR_decode {n} (desc : PB_Message n)
-  : nat -> DecodeM PB_IR ByteString.
-Proof.
-  refine
-    (Fix lt_wf _
-         (fun sz decode =>
-            fun b cd =>
-              match sz with
-              | O => Some (nil, b, cd)
-              | S _ => `(elm, b1, cd1) <- Decode_w_Measure_lt (PB_IRElm_decode desc) b cd _;
-                        if lt_dec sz (bin_measure b - bin_measure (proj1_sig b1)) then
-                          None
-                        else
-                          `(ir, b2, cd2) <- decode (sz - (bin_measure b - bin_measure (proj1_sig b1))) _ (proj1_sig b1) cd1;
-                        Some (elm :: ir, b2, cd2)
-              end)).
-  - apply PB_IRElm_decode_lt.
-  - destruct b1. unfold lt_B in l. simpl in *. abstract omega.
-Defined.
-
-Theorem PB_IR_decode_correct {n} (desc : PB_Message n)
-        {P : CacheDecode -> Prop}
-        (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b)))
-  : forall sz,
-    CorrectDecoder _
-                   (fun ir =>
-                      (forall b ce ce',
-                          PB_IR_format ir ce ↝ (b, ce') ->
-                          bin_measure b = sz) /\
-                      forall elm, In elm ir -> PB_IRElm_OK desc elm)
-                   (fun _ _ => True)
-                   PB_IR_format (PB_IR_decode desc sz) P.
-Proof.
-  unfold PB_IRElm_OK, PB_IR_format, PB_IR_decode.
-  split; intros. {
-    generalize dependent sz.
-    generalize dependent env.
-    generalize dependent env'.
-    generalize dependent xenv.
-    generalize dependent ext.
-    generalize dependent bin.
-    clear H1.
-    induction data; intros. {
-      eexists.
-      intuition; eauto. specialize (H1 _ _ _ H2).
-      inversion H2. clear H2.
-      assert (sz = 0). {
-        subst.
-        simpl in *. unfold length_ByteString in *.
-        simpl in *. omega.
-      } subst.
-      rewrite @mempty_left.
-      simpl in *. rewrite Coq.Init.Wf.Fix_eq by solve_extensionality; simpl.
-      auto.
-    } {
-      destruct H0 as [H1 H3]. specialize (H1 _ _ _ H2).
-      computes_to_inv2.
-      destruct (PB_IRElm_decode_correct desc) with (P:=P) as [He _]; auto.
-      edestruct He with (ext:=mappend b ext) as [? [? [? ?]]]; eauto.
-      apply H3. intuition.
-      rewrite @mappend_measure.
-      edestruct IHdata with (ext:=ext) as [? [? [? ?]]]; intros; eauto.
-      split. intros.
-      eapply PB_IR_format_sz_eq; eauto.
-      intros. apply H3. intuition. clear IHdata.
-      eexists; intuition; eauto.
-      rewrite Coq.Init.Wf.Fix_eq by solve_extensionality; simpl.
-      match goal with
-      | _ : _ |- context [match ?a with _ => _ end] => destruct a eqn:?
-      end.
-      pose proof (PB_IRElm_decode_lt desc _ _ _ _ _ H0).
-      match goal with
-      | H : lt_B _ _ |- _ => unfold lt_B in H; repeat rewrite @mappend_measure in H; simpl in H
-      end; omega.
-      edestruct @Decode_w_Measure_lt_eq
-        with (A_decode_lt:=(PB_IRElm_decode_lt desc)).
-      unfold PB_IRElm_decode. apply H0.
-      revert x1 H8. rewrite mappend_assoc. simpl. intros.
-      rewrite H8. simpl. clear x1 H8.
-      destruct lt_dec.
-      repeat rewrite (@mappend_measure _ ByteStringQueueMonoid) in l. simpl in l.
-      omega. repeat rewrite (@mappend_measure _ ByteStringQueueMonoid).
-      match goal with
-      | _ : _ |- context [Fix _ _ _ ?a _ _] => 
-        replace a with (bin_measure b)
-      end. simpl in H5. simpl. rewrite H5. auto.
-      match goal with
-      | _ : _ |- context [match ?a with _ => _ end] =>
-        replace a with (bin_measure b0) by omega
-      end.
-      destruct (bin_measure b0) eqn:Heq; simpl in *; omega.
-    }
-  } {
-    generalize dependent env.
-    generalize dependent env'.
-    generalize dependent xenv'.
-    generalize dependent data.
-    generalize dependent ext.
-    generalize dependent bin.
-    induction sz using (well_founded_ind lt_wf); intros.
-    rewrite Coq.Init.Wf.Fix_eq in H1 by solve_extensionality.
-    destruct sz. {
-      inversion H1. clear H1. subst. split; auto.
-      exists mempty, env. repeat split; intros.
-      - symmetry. apply mempty_left.
-      - inversion H1. reflexivity.
-      - inversion H1.
-    } {
-      decode_opt_to_inv.
-      destruct x0. simpl proj1_sig in H3.  simpl proj2_sig in H3.
-      apply Decode_w_Measure_lt_eq_inv in H1. simpl in H1.
-      destruct (PB_IRElm_decode_correct desc) with (P:=P) as [_ Hd]; auto.
-      edestruct Hd as [? [? [? [? [? [? ?]]]]]]; eauto. clear Hd.
-      destruct lt_dec; try congruence.
-      decode_opt_to_inv. subst.
-      edestruct H. 3:eauto. unfold lt_B in l. omega. eauto. eauto.
-      destruct H11 as [? [? [? [? [[? ?] ?]]]]].
-      split; eauto. eexists _, _. repeat split.
-      - computes_to_econstructor; eauto.
-        computes_to_econstructor; eauto.
-      - simpl fst. rewrite <- mappend_assoc. subst. auto.
-      - intros. unfold compose in H16. unfold Bind2 in H16.
-        computes_to_inv. destruct v, v0. simpl fst in *. simpl snd in *.
-        inversion H16''. subst. clear H16''.
-        specialize (H13 _ _ _ H16'). rewrite @mappend_measure. rewrite H13.
-        repeat rewrite @mappend_measure.
-        repeat rewrite @mappend_measure in n0.
-        assert (bin_measure b0 = bin_measure x2). {
-          eapply PB_IRElm_format_sz_eq; eauto.
-        } omega.
-      - intros. destruct H16.
-        + subst. eauto.
-        + apply H14. eauto.
-    }
-  }
-Qed.
-
 Instance PR_IR_monoid : Monoid PB_IR :=
   {| mappend := @app _;
      bin_measure := @length _;
@@ -1112,12 +942,12 @@ Definition PB_Message_format {n} (desc : PB_Message n)
   : FormatM (PB_Message_denote desc) ByteString :=
   (fun msg ce =>
      `(ir, ce') <- PB_Message_IR_format desc msg ce;
-       PB_IR_format (rev ir) ce')%comp.
+       SizedList_format PB_IRElm_format (rev ir) ce')%comp.
 
 Definition PB_Message_decode {n} (desc : PB_Message n)
   : DecodeM (PB_Message_denote desc) ByteString :=
   fun b cd =>
-    `(ir, b', cd1) <- PB_IR_decode desc (bin_measure b) b cd;
+    `(ir, b', cd1) <- SizedList_decode (PB_IRElm_decode desc) (PB_IRElm_decode_lt desc) (bin_measure b) b cd;
       `(msg, ir', cd2) <- PB_Message_IR_decode desc (rev ir) cd1;
       Some (msg, b', cd2).
 
@@ -1134,15 +964,18 @@ Proof.
   split; intros. {
     subst.
     computes_to_inv2.
-    edestruct (PB_IR_decode_correct desc (P:=P)) as [He2 _]; eauto.
+    edestruct (SizedList_decode_correct _ _ _ _ _
+                                        PB_IRElm_format_sz_eq
+                                        (PB_IRElm_decode_lt desc)
+                                        (PB_IRElm_decode_correct desc P P_OK)) as [He2 _]; eauto.
     edestruct He2; try apply H3'; eauto.
     split. {
-      intros. eapply PB_IR_format_sz_eq; eauto.
+      intros. eapply (SizedList_format_sz_eq _ PB_IRElm_format_sz_eq); eauto.
     } {
       intros. rewrite <- in_rev in *.
       eapply PB_Message_IR_Elm_OK; eauto.
     }
-    intuition. clear He2.
+    apply SizedList_predicate_rest_True. intuition. clear He2.
     edestruct (PB_Message_IR_decode_correct desc) as [He1 _]; eauto.
     edestruct He1; eauto. eauto. intuition. clear He1.
     eexists. repeat split; eauto.
@@ -1151,12 +984,14 @@ Proof.
     rewrite H6. simpl. eauto.
   } {
     decode_opt_to_inv. subst.
+
     edestruct (PB_Message_IR_decode_correct desc) as [_ Hd1]; eauto.
     edestruct Hd1 as [? [? [? [? [? [? ?]]]]]]; try apply H2; eauto.
-    edestruct (PB_IR_decode_correct desc (P:=P)) as [_ Hd2]; eauto.
-    edestruct Hd2 as [? [? [? [? [? [? ?]]]]]]; try apply H1; eauto.
-    edestruct (PB_IR_decode_correct desc (P:=P)) as [_ Hd2]; eauto.
-    edestruct Hd2 as [? [? [? [? [? [? ?]]]]]]; try apply H1; eauto.
+    all : edestruct (SizedList_decode_correct _ _ _ _ _
+                                              PB_IRElm_format_sz_eq
+                                              (PB_IRElm_decode_lt desc)
+                                              (PB_IRElm_decode_correct desc P P_OK)) as [_ Hd2]; eauto.
+    all : edestruct Hd2 as [? [? [? [? [? [? ?]]]]]]; try apply H1; eauto.
 
     subst. split; eauto. eexists _, _. repeat split; eauto.
     computes_to_econstructor; eauto. simpl.
