@@ -19,10 +19,10 @@ Section SizedList.
   Variable A_format : FormatM A B.
   Variable A_decode : DecodeM A B.
   Variable A_cache_inv : CacheDecode -> Prop.
-  Variable A_decode_lt : forall b cd x b' cd', A_decode b cd = Some (x, b', cd') -> lt_B b' b.
   Variable A_format_sz_eq : forall x b1 b2 ce1 ce1' ce2 ce2', A_format x ce1 ↝ (b1, ce1') ->
                                                          A_format x ce2 ↝ (b2, ce2') ->
                                                          bin_measure b1 = bin_measure b2.
+  Variable A_decode_lt : forall b cd x b' cd', A_decode b cd = Some (x, b', cd') -> lt_B b' b.
   Variable A_decode_correct : CorrectDecoder monoid A_predicate A_predicate_rest A_format A_decode A_cache_inv.
 
   Definition SizedList_format : FormatM (list A) B :=
@@ -178,3 +178,13 @@ Section SizedList.
   Qed.
 
 End SizedList.
+
+Lemma SizedList_predicate_rest_True {A B}
+      {cache : Cache}
+      {monoid : Monoid B}
+      (A_format : FormatM A B)
+  : forall (xs : list A) (b : B),
+    SizedList_predicate_rest (fun a b => True) A_format xs b.
+Proof.
+  induction xs; simpl; eauto.
+Qed.
