@@ -90,3 +90,12 @@ Class QueueMonoidOpt (bin : Type) (trans : Monoid bin) (B : Type) :=
       + constructor; eauto.
       + eauto.
   Qed.
+
+  Require Import Coq.omega.Omega.
+  Lemma mempty_measure_0 {B} {monoid : Monoid B} : bin_measure mempty = 0.
+  Proof.
+    pose proof (mempty_left mempty).
+    apply (f_equal bin_measure) in H.
+    rewrite mappend_measure in H.
+    omega.
+  Qed.
