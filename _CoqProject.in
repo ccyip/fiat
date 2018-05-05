@@ -382,6 +382,7 @@ src/Narcissus/Formats/Vector.v
 src/Narcissus/Formats/Word.v
 src/Narcissus/Formats/WordOpt.v
 src/Narcissus/Formats/VarintOpt.v
+src/Narcissus/Formats/SizedListOpt.v
 src/Narcissus/Stores/Cache.v
 src/Narcissus/Stores/DomainNameStore.v
 src/Narcissus/Stores/EmptyStore.v
