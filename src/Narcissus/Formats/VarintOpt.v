@@ -101,26 +101,6 @@ Proof.
 Qed.
 Hint Resolve div_eucl_mod_lt_sz_add.
 
-(* Copy from DomainNameOpt *)
-Lemma Decode_w_Measure_lt_eq_inv
-  : forall (A B : Type) (cache : Cache) (monoid : Monoid B)
-      (A_decode : B -> CacheDecode -> option (A * B * CacheDecode))
-      (b : B) (cd : CacheDecode)
-      (A_decode_lt : forall (b0 : B) (cd0 : CacheDecode) (a : A) (b' : B) (cd' : CacheDecode),
-          A_decode b0 cd0 = Some (a, b', cd') -> lt_B b' b0)
-      (a' : A) (cd' : CacheDecode)
-      pf,
-    Decode_w_Measure_lt A_decode b cd A_decode_lt = Some (a', pf, cd')
-    -> A_decode b cd = Some (a', `pf , cd').
-Proof.
-  unfold Decode_w_Measure_lt; intros.
-  revert pf H.
-  generalize (A_decode_lt b cd).
-  destruct (A_decode b cd) as [ [ [? ?] ?] | ]; simpl; intros;
-    try discriminate.
-  injections; reflexivity.
-Qed.
-
 Section Varint.
   Context {B : Type}.
   Context {cache : Cache}.

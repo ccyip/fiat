@@ -501,6 +501,26 @@ Section DecodeWMeasure.
     discriminate.
   Qed.
 
+  (* Copy from DomainNameOpt *)
+  Lemma Decode_w_Measure_lt_eq_inv
+        (b : B)
+        (cd : CacheDecode)
+        (A_decode_lt : forall (b0 : B) (cd0 : CacheDecode) (a : A) (b' : B) (cd' : CacheDecode),
+            A_decode b0 cd0 = Some (a, b', cd') -> lt_B b' b0)
+    : forall (a' : A) (cd' : CacheDecode)
+        pf,
+      Decode_w_Measure_lt b cd A_decode_lt = Some (a', pf, cd')
+      -> A_decode b cd = Some (a', `pf , cd').
+  Proof.
+    unfold Decode_w_Measure_lt; intros.
+    revert pf H.
+    generalize (A_decode_lt b cd).
+    destruct (A_decode b cd) as [ [ [? ?] ?] | ]; simpl; intros;
+      try discriminate.
+    injections; reflexivity.
+  Qed.
+
+
   Lemma Decode_w_Measure_lt_eq'
         (b : B)
         (cd : CacheDecode)
