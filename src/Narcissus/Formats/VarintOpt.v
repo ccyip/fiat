@@ -327,6 +327,15 @@ Section Varint.
     }
   Qed.
 
+  Theorem Varint_format_sz_eq
+    : forall d b1 b2 ce1 ce1' ce2 ce2',
+      Varint_format d ce1 ↝ (b1, ce1') ->
+      Varint_format d ce2 ↝ (b2, ce2') ->
+      bin_measure b1 = bin_measure b2.
+  Proof.
+    intros; f_equal; eapply Varint_format_eq; eauto.
+  Qed.
+
 End Varint.
 
 Require Import
