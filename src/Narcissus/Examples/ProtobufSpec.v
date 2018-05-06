@@ -127,28 +127,18 @@ Definition PB_SingularType_decode (sty : PB_SingularType) :=
 Definition PB_SingularType_decode_correct (sty : PB_SingularType) :=
   Eval simpl in proj2_sig (PB_SingularType_decoder sty).
 
-Theorem PB_SingularType_format_eq (sty : PB_SingularType)
-  : forall d b1 b2 ce1 ce1' ce2 ce2',
-    PB_SingularType_format sty d ce1 ↝ (b1, ce1') ->
-    PB_SingularType_format sty d ce2 ↝ (b2, ce2') ->
-    b1 = b2.
-Proof.
-  unfold PB_SingularType_format.
-  destruct sty; intros;
-    repeat match goal with
-           | H : format_word _  _ ↝ _ |- _ => inversion H; subst; clear H
-           end;
-    auto.
-  all : eapply Varint_format_eq; eauto.
-Qed.
-
 Theorem PB_SingularType_format_sz_eq (sty : PB_SingularType)
   : forall d b1 b2 ce1 ce1' ce2 ce2',
     PB_SingularType_format sty d ce1 ↝ (b1, ce1') ->
     PB_SingularType_format sty d ce2 ↝ (b2, ce2') ->
     bin_measure b1 = bin_measure b2.
 Proof.
-  intros; f_equal; eapply PB_SingularType_format_eq; eauto.
+  unfold PB_SingularType_format; intros; f_equal.
+  destruct sty;
+    repeat match goal with
+           | H : format_word _  _ ↝ _ |- _ => inversion H; subst; clear H
+           end;
+    auto; eapply Varint_format_eq; eauto.
 Qed.
 
 Theorem PB_SingularType_format_byte (sty : PB_SingularType)
@@ -244,39 +234,35 @@ Proof.
   }
 Qed.
 
-Theorem PB_RepeatedType_format_eq (sty : PB_SingularType)
-  : forall d b1 b2 ce1 ce1' ce2 ce2',
-    PB_SingularType_format sty d ce1 ↝ (b1, ce1') ->
-    PB_SingularType_format sty d ce2 ↝ (b2, ce2') ->
-    b1 = b2.
-Proof.
-  unfold PB_SingularType_format.
-  destruct sty; intros;
-    repeat match goal with
-           | H : format_word _  _ ↝ _ |- _ => inversion H; subst; clear H
-           end;
-    auto.
-  all : eapply Varint_format_eq; eauto.
-Qed.
-
 Theorem PB_RepeatedType_format_sz_eq (sty : PB_SingularType)
   : forall d b1 b2 ce1 ce1' ce2 ce2',
-    PB_SingularType_format sty d ce1 ↝ (b1, ce1') ->
-    PB_SingularType_format sty d ce2 ↝ (b2, ce2') ->
+    PB_RepeatedType_format sty d ce1 ↝ (b1, ce1') ->
+    PB_RepeatedType_format sty d ce2 ↝ (b2, ce2') ->
     bin_measure b1 = bin_measure b2.
 Proof.
-  intros; f_equal; eapply PB_SingularType_format_eq; eauto.
+  unfold PB_RepeatedType_format. intros.
+  computes_to_inv2. rewrite !@mappend_measure.
+  assert (bin_measure b4 = bin_measure b0). {
+    eapply SizedList_format_sz_eq; eauto.
+    apply PB_SingularType_format_sz_eq.
+  }
+  rewrite H1 in *.
+  erewrite Varint_format_sz_eq; eauto.
 Qed.
 
 Theorem PB_RepeatedType_format_byte (sty : PB_SingularType)
   : forall d b ce ce',
-    PB_SingularType_format sty d ce ↝ (b, ce') ->
+    PB_RepeatedType_format sty d ce ↝ (b, ce') ->
     bin_measure b mod 8 = 0.
 Proof.
-  unfold PB_SingularType_format.
-  destruct sty; intros;
-    solve [eapply format_word_byte; eauto; eauto |
-           eapply Varint_format_byte; eauto; eauto].
+  unfold PB_RepeatedType_format.
+  intros. computes_to_inv2.
+  rewrite @mappend_measure.
+  rewrite <- Nat.add_mod_idemp_l by auto.
+  rewrite <- Nat.add_mod_idemp_r by auto.
+  erewrite Varint_format_byte; eauto.
+  erewrite SizedList_format_byte; eauto.
+  apply PB_SingularType_format_byte.
 Qed.
 
 Inductive PB_Type : Set :=
@@ -299,6 +285,7 @@ Definition PB_Type_denote (ty : PB_Type) : Type :=
 Definition PB_Type_format (ty : PB_Type) : FormatM (PB_Type_denote ty) ByteString :=
   match ty with
   | PB_Singular sty => PB_SingularType_format sty
+  | PB_Repeated sty => PB_RepeatedType_format sty
   end.
 
 (* :TODO: extend decode_step *)
@@ -319,7 +306,8 @@ Proof.
   refine (exist _ (d ty) _).
 
   intros; destruct ty; simpl;
-    apply PB_SingularType_decode_correct;
+    [apply PB_SingularType_decode_correct |
+     apply PB_RepeatedType_decode_correct];
     repeat decode_step idtac.
 Defined.
 
@@ -329,23 +317,15 @@ Definition PB_Type_decode (ty : PB_Type) :=
 Definition PB_Type_decode_correct (ty : PB_Type) :=
   Eval simpl in proj2_sig (PB_Type_decoder ty).
 
-Theorem PB_Type_format_eq (ty : PB_Type)
-  : forall d b1 b2 ce1 ce1' ce2 ce2',
-    PB_Type_format ty d ce1 ↝ (b1, ce1') ->
-    PB_Type_format ty d ce2 ↝ (b2, ce2') ->
-    b1 = b2.
-Proof.
-  unfold PB_Type_format. destruct ty.
-  apply PB_SingularType_format_eq.
-Qed.
-
 Theorem PB_Type_format_sz_eq (ty : PB_Type)
   : forall d b1 b2 ce1 ce1' ce2 ce2',
     PB_Type_format ty d ce1 ↝ (b1, ce1') ->
     PB_Type_format ty d ce2 ↝ (b2, ce2') ->
     bin_measure b1 = bin_measure b2.
 Proof.
-  intros; f_equal; eapply PB_Type_format_eq; eauto.
+  unfold PB_Type_format; intros; destruct ty;
+    [eapply PB_SingularType_format_sz_eq | eapply PB_RepeatedType_format_sz_eq];
+    eauto.
 Qed.
 
 Theorem PB_Type_format_byte (ty : PB_Type)
@@ -355,6 +335,7 @@ Theorem PB_Type_format_byte (ty : PB_Type)
 Proof.
   unfold PB_Type_format. destruct ty.
   apply PB_SingularType_format_byte.
+  apply PB_RepeatedType_format_byte.
 Qed.
 
 Definition PB_Type_default (ty : PB_Type) : PB_Type_denote ty :=
@@ -365,6 +346,7 @@ Definition PB_Type_default (ty : PB_Type) : PB_Type_denote ty :=
                       | PB_int32 => 0%N
                       | PB_int64 => 0%N
                       end
+  | PB_Repeated sty => []
   end.
 
 Definition PB_Type_toWireType (ty : PB_Type) : PB_WireType :=
@@ -375,6 +357,7 @@ Definition PB_Type_toWireType (ty : PB_Type) : PB_WireType :=
                           | PB_int32 => PB_Varint
                           | PB_int64 => PB_Varint
                           end
+  | PB_RepeatedType => PB_LengthDelimited
   end.
 
 Record PB_Field := 
@@ -738,7 +721,7 @@ Proof.
     rewrite H5. rewrite H0. simpl.
     erewrite PB_Message_boundedTag_correct by eassumption.
     repeat progress f_equal.
-    destruct data as [tag ty val]; destruct ty as [sty]; destruct sty;
+    destruct data as [tag ty val]; destruct ty as [sty | sty]; destruct sty;
       simpl in *; try reflexivity.
   - destruct (PB_Message_boundedTag desc t) eqn:Heq; try solve [inversion H1].
     decode_opt_to_inv.
@@ -751,24 +734,14 @@ Proof.
     rewrite Heq. auto.
 Qed.
 
-Theorem PB_IRVal_format_eq
-  : forall d b1 b2 ce1 ce1' ce2 ce2',
-    PB_IRVal_format d ce1 ↝ (b1, ce1') ->
-    PB_IRVal_format d ce2 ↝ (b2, ce2') ->
-    b1 = b2.
-Proof.
-  unfold PB_IRVal_format.
-  destruct d.
-  apply PB_Type_format_eq.
-Qed.
-
 Theorem PB_IRVal_format_sz_eq
   : forall d b1 b2 ce1 ce1' ce2 ce2',
     PB_IRVal_format d ce1 ↝ (b1, ce1') ->
     PB_IRVal_format d ce2 ↝ (b2, ce2') ->
     bin_measure b1 = bin_measure b2.
 Proof.
-  intros; f_equal; eapply PB_IRVal_format_eq; eauto.
+  unfold PB_IRVal_format. destruct d.
+  apply PB_Type_format_sz_eq.
 Qed.
 
 Theorem PB_IRVal_format_byte
@@ -872,27 +845,19 @@ Proof.
   auto.
 Qed.
 
-Theorem PB_IRElm_format_eq
-  : forall d b1 b2 ce1 ce1' ce2 ce2',
-    PB_IRElm_format d ce1 ↝ (b1, ce1') ->
-    PB_IRElm_format d ce2 ↝ (b2, ce2') ->
-    b1 = b2.
-Proof.
-  unfold PB_IRElm_format.
-  intros.
-  computes_to_inv2.
-  progress repeat f_equal.
-  eapply Varint_format_eq; eauto.
-  eapply PB_IRVal_format_eq; eauto.
-Qed.
-
 Theorem PB_IRElm_format_sz_eq
   : forall d b1 b2 ce1 ce1' ce2 ce2',
     PB_IRElm_format d ce1 ↝ (b1, ce1') ->
     PB_IRElm_format d ce2 ↝ (b2, ce2') ->
     bin_measure b1 = bin_measure b2.
 Proof.
-  intros; f_equal; eapply PB_IRElm_format_eq; eauto.
+  unfold PB_IRElm_format.
+  intros.
+  computes_to_inv2.
+  rewrite !(@mempty_right _ ByteStringQueueMonoid).
+  rewrite !@mappend_measure.
+  erewrite Varint_format_sz_eq; eauto.
+  erewrite PB_IRVal_format_sz_eq with (b1:=b6) (b2:=b0); eauto.
 Qed.
 
 Theorem PB_IRElm_format_byte
