@@ -22,6 +22,7 @@ Section SizedList.
   Variable A_format_sz_eq : forall x b1 b2 ce1 ce1' ce2 ce2', A_format x ce1 ↝ (b1, ce1') ->
                                                          A_format x ce2 ↝ (b2, ce2') ->
                                                          bin_measure b1 = bin_measure b2.
+  Variable A_format_byte : forall d b ce ce', A_format d ce ↝ (b, ce') -> bin_measure b mod 8 = 0.
   Variable A_decode_lt : forall b cd x b' cd', A_decode b cd = Some (x, b', cd') -> lt_B b' b.
   Variable A_decode_correct : CorrectDecoder monoid A_predicate A_predicate_rest A_format A_decode A_cache_inv.
 
@@ -64,6 +65,20 @@ Section SizedList.
     - computes_to_inv2.
       rewrite !mappend_measure.
       erewrite A_format_sz_eq; eauto.
+  Qed.
+
+  Theorem SizedList_format_byte
+    : forall xs b ce ce',
+      SizedList_format xs ce ↝ (b, ce') ->
+      bin_measure b mod 8 = 0.
+  Proof.
+    induction xs; intros.
+    - inversion H. rewrite mempty_measure_0. auto.
+    - simpl in H. computes_to_inv2. rewrite mappend_measure.
+      rewrite <- Nat.add_mod_idemp_r; auto.
+      rewrite <- Nat.add_mod_idemp_l; auto.
+      erewrite A_format_byte; eauto.
+      erewrite IHxs; eauto.
   Qed.
 
   Fixpoint SizedList_predicate_rest (xs : list A) (b : B) : Prop :=

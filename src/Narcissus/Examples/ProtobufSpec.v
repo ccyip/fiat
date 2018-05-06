@@ -162,21 +162,138 @@ Proof.
            eapply Varint_format_byte; eauto; eauto].
 Qed.
 
+Theorem PB_SingularType_decode_lt (sty : PB_SingularType)
+  : forall (b : ByteString) (cd : CacheDecode) (d : PB_SingularType_denote sty)
+      (b' : ByteString) (cd' : CacheDecode),
+    PB_SingularType_decode sty b cd = Some (d, b', cd') -> lt_B b' b.
+Proof.
+  intros.
+  destruct sty; simpl in *.
+  1-2 : unfold decode_word in H; eapply decode_word_lt; eauto.
+  all : eapply Varint_decode_lt; eauto.
+Qed.
+
+Definition PB_RepeatedType_denote (sty : PB_SingularType) : Type := list (PB_SingularType_denote sty).
+
+(* :Q: cache is funny. Is it a good idea to format sizedlist twice or ignore cache? *)
+Definition PB_RepeatedType_format (sty : PB_SingularType)
+  : FormatM (PB_RepeatedType_denote sty) ByteString :=
+  (fun xs ce =>
+     `(b1, ce1) <- SizedList_format (PB_SingularType_format sty) xs ce;
+       `(b2, _) <- Varint_format (N.of_nat ((bin_measure b1) / 8)) ce;
+       ret (mappend b2 b1, ce1))%comp.
+
+Definition PB_RepeatedType_decode (sty : PB_SingularType)
+  : DecodeM (PB_RepeatedType_denote sty) ByteString :=
+  fun b cd =>
+    `(sz, b1, cd1) <- (`(x, b1, cd1) <- Varint_decode b cd;
+                        Some (N.to_nat x, b1, cd1));
+      SizedList_decode (PB_SingularType_decode sty)
+                       (PB_SingularType_decode_lt sty)
+                       (sz * 8) b1 cd.
+
+Local Arguments Nat.div : simpl never.
+Theorem PB_RepeatedType_decode_correct (sty : PB_SingularType)
+           {P : CacheDecode -> Prop}
+           (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b)))
+  : CorrectDecoder _
+                   (fun _ => True)
+                   (fun _ _ => True)
+                   (PB_RepeatedType_format sty) (PB_RepeatedType_decode sty) P.
+Proof.
+  unfold PB_RepeatedType_format, PB_RepeatedType_decode.
+  split; intros. {
+    computes_to_inv2.
+    edestruct (Varint_decode_correct (P:=P)) as [He _]; eauto.
+    edestruct He as [? [? [? ?]]]; eauto.
+    edestruct (SizedList_decode_correct _ _ _ _ _
+                                        (PB_SingularType_format_sz_eq sty)
+                                        (PB_SingularType_decode_lt sty)
+                                        (PB_SingularType_decode_correct sty P P_OK)) as [He' _].
+    clear H4 H5.
+    edestruct He' as [? [? [? ?]]]; try apply H2; eauto. intuition.
+    eapply SizedList_format_sz_eq. apply PB_SingularType_format_sz_eq. eauto. eauto.
+    apply SizedList_predicate_rest_True.
+    eexists. repeat split; eauto.
+    rewrite <- @mappend_assoc. rewrite H3.
+    simpl. rewrite Nnat.Nat2N.id.
+    assert (bin_measure b0 mod 8 = 0) as L. {
+      eapply SizedList_format_byte; eauto.
+      apply PB_SingularType_format_byte.
+    }
+    rewrite Nat.mul_comm. apply Nat.div_exact in L; auto.
+    simpl bin_measure in L. rewrite <- L.
+    simpl in H4. eauto.
+  } {
+    decode_opt_to_inv.
+    subst.
+    edestruct (Varint_decode_correct (P:=P)) as [_ Hd]; eauto.
+    edestruct Hd as [? [? [? [? [? [? ?]]]]]]; eauto.
+    edestruct (SizedList_decode_correct _ _ _ _ _
+                                        (PB_SingularType_format_sz_eq sty)
+                                        (PB_SingularType_decode_lt sty)
+                                        (PB_SingularType_decode_correct sty P P_OK)) as [_ Hd'].
+    edestruct Hd' as [? [? [? [? [? [[? ?] ?]]]]]]; try apply H2; eauto.
+    split; eauto.
+    eexists _, _. repeat split; eauto.
+    computes_to_econstructor. eauto.
+    computes_to_econstructor; eauto.
+    apply H11 in H9. simpl fst. rewrite H9. rewrite Nat.div_mul by auto.
+    rewrite Nnat.N2Nat.id. eauto.
+    simpl fst. rewrite <- mappend_assoc. subst. reflexivity.
+  }
+Qed.
+
+Theorem PB_RepeatedType_format_eq (sty : PB_SingularType)
+  : forall d b1 b2 ce1 ce1' ce2 ce2',
+    PB_SingularType_format sty d ce1 ↝ (b1, ce1') ->
+    PB_SingularType_format sty d ce2 ↝ (b2, ce2') ->
+    b1 = b2.
+Proof.
+  unfold PB_SingularType_format.
+  destruct sty; intros;
+    repeat match goal with
+           | H : format_word _  _ ↝ _ |- _ => inversion H; subst; clear H
+           end;
+    auto.
+  all : eapply Varint_format_eq; eauto.
+Qed.
+
+Theorem PB_RepeatedType_format_sz_eq (sty : PB_SingularType)
+  : forall d b1 b2 ce1 ce1' ce2 ce2',
+    PB_SingularType_format sty d ce1 ↝ (b1, ce1') ->
+    PB_SingularType_format sty d ce2 ↝ (b2, ce2') ->
+    bin_measure b1 = bin_measure b2.
+Proof.
+  intros; f_equal; eapply PB_SingularType_format_eq; eauto.
+Qed.
+
+Theorem PB_RepeatedType_format_byte (sty : PB_SingularType)
+  : forall d b ce ce',
+    PB_SingularType_format sty d ce ↝ (b, ce') ->
+    bin_measure b mod 8 = 0.
+Proof.
+  unfold PB_SingularType_format.
+  destruct sty; intros;
+    solve [eapply format_word_byte; eauto; eauto |
+           eapply Varint_format_byte; eauto; eauto].
+Qed.
+
 Inductive PB_Type : Set :=
 | PB_Singular : PB_SingularType -> PB_Type
-(* | PB_Repeated : PB_SingularType -> PB_Type *)
+| PB_Repeated : PB_SingularType -> PB_Type
 .
 
 Definition PB_Type_eq_dec
   : forall t1 t2 : PB_Type, {t1 = t2} + {t1 <> t2}.
 Proof.
-  decide equality.
-  decide equality.
+  repeat decide equality.
 Defined.
 
 Definition PB_Type_denote (ty : PB_Type) : Type :=
   match ty with
   | PB_Singular sty => PB_SingularType_denote sty
+  | PB_Repeated sty => PB_RepeatedType_denote sty
   end.
 
 Definition PB_Type_format (ty : PB_Type) : FormatM (PB_Type_denote ty) ByteString :=
