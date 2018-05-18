@@ -301,6 +301,27 @@ Section Varint.
     }
   Qed.
 
+  Theorem word_format_eq
+    : forall sz d b1 b2 ce1 ce1' ce2 ce2',
+      format_word (sz:=sz) d ce1 ↝ (b1, ce1') ->
+      format_word (sz:=sz) d ce2 ↝ (b2, ce2') ->
+      b1 = b2.
+    Proof.
+      intros.
+      repeat match goal with
+             | H : format_word _  _ ↝ _ |- _ => inversion H; subst; clear H
+             end; eauto.
+    Qed.
+
+  Theorem word_format_sz_eq
+    : forall sz d b1 b2 ce1 ce1' ce2 ce2',
+      format_word (sz:=sz) d ce1 ↝ (b1, ce1') ->
+      format_word (sz:=sz) d ce2 ↝ (b2, ce2') ->
+      bin_measure b1 = bin_measure b2.
+    Proof.
+      intros; f_equal; eapply word_format_eq; eauto.
+    Qed.
+
   Theorem Varint_format_eq
     : forall d b1 b2 ce1 ce1' ce2 ce2',
       Varint_format d ce1 ↝ (b1, ce1') ->
@@ -313,15 +334,11 @@ Section Varint.
     apply (unroll_LeastFixedPoint Varint_body_monotone) in H1.
     unfold Varint_body in *.
     destruct N.div_eucl eqn:Hdiv. destruct n. {
-      repeat match goal with
-             | H : format_word _  _ ↝ _ |- _ => inversion H; subst; clear H
-             end; eauto.
+      eapply word_format_eq; eauto.
     } {
       computes_to_inv2.
       f_equal.
-      - repeat match goal with
-               | H : format_word _  _ ↝ _ |- _ => inversion H; subst; clear H
-               end; eauto.
+      - eapply word_format_eq; eauto.
       - eapply H; eauto. eapply div_eucl_div_lt; eauto; try easy.
         destruct d; easy.
     }
@@ -344,7 +361,7 @@ Require Import
 
 Local Open Scope nat.
 
-Lemma format_word_sz n (w : word n)
+Lemma word_format_sz n (w : word n)
   : forall ce ce' b,
     format_word w ce ↝ (b, ce') ->
     bin_measure b = n.
@@ -356,13 +373,13 @@ Proof.
     apply (IHw ce' ce'). apply ReturnComputes.
 Qed.
 
-Theorem format_word_byte n (w : word n)
+Theorem word_format_byte n (w : word n)
   : forall ce ce' b,
     n mod 8 = 0 ->
     format_word w ce ↝ (b, ce') ->
     bin_measure b mod 8 = 0.
 Proof.
-  intros. erewrite format_word_sz; eauto.
+  intros. erewrite word_format_sz; eauto.
 Qed.
 
 Theorem Varint_format_byte
@@ -374,7 +391,7 @@ Proof.
   apply (unroll_LeastFixedPoint Varint_body_monotone) in H0.
   unfold Varint_body in *.
   destruct N.div_eucl eqn:Hdiv. destruct n. {
-    eapply format_word_byte; eauto; try easy.
+    eapply word_format_byte; eauto; try easy.
   } {
     computes_to_inv2.
     rewrite @mappend_measure.
@@ -382,7 +399,7 @@ Proof.
     match goal with
     | _ : _ |- ?a mod _ = 0 => replace a with 0
     end; try easy.
-    erewrite format_word_byte; eauto; try easy.
+    erewrite word_format_byte; eauto; try easy.
     symmetry. eapply H; eauto.
     eapply div_eucl_div_lt; eauto; try easy.
     destruct d; easy.
