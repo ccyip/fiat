@@ -54,13 +54,29 @@ Section SizedList.
     destruct b1. unfold lt_B in *. simpl in *. abstract omega.
   Defined.
 
+  Theorem SizedList_decode_le
+    : forall sz b cd xs b' cd',
+      SizedList_decode sz b cd = Some (xs, b', cd') -> le_B b' b.
+  Proof.
+    unfold SizedList_decode.
+    induction sz using (well_founded_ind lt_wf); intros.
+    rewrite Coq.Init.Wf.Fix_eq in H0 by solve_extensionality.
+    destruct sz. injections. unfold le_B. easy.
+    decode_opt_to_inv. destruct lt_dec. easy.
+    decode_opt_to_inv. subst. destruct x0.
+    remember (S sz) as sz'.
+    unfold lt_B, le_B in *.
+    apply H in H1; clear H;
+      simpl in *; omega.
+  Qed.
+
   Theorem SizedList_format_sz_eq
-    : forall d b1 b2 ce1 ce1' ce2 ce2',
-      SizedList_format d ce1 ↝ (b1, ce1') ->
-      SizedList_format d ce2 ↝ (b2, ce2') ->
+    : forall xs b1 b2 ce1 ce1' ce2 ce2',
+      SizedList_format xs ce1 ↝ (b1, ce1') ->
+      SizedList_format xs ce2 ↝ (b2, ce2') ->
       bin_measure b1 = bin_measure b2.
   Proof.
-    unfold SizedList_format. induction d; intros.
+    unfold SizedList_format. induction xs; intros.
     - inversion H. inversion H0. auto.
     - computes_to_inv2.
       rewrite !mappend_measure.
