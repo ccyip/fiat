@@ -317,38 +317,128 @@ Proof.
   intros. eapply word_format_byte; eauto; eauto.
 Qed.
 
+Theorem PB_WireType_decode_lt (wty : PB_WireType)
+  : forall (b : ByteString) (cd : CacheDecode) (d : PB_WireType_denote wty)
+      (b' : ByteString) (cd' : CacheDecode),
+    PB_WireType_decode wty b cd = Some (d, b', cd') -> lt_B b' b.
+Proof.
+  intros. destruct wty; simpl in *.
+  eapply Varint_decode_lt; eauto.
+  eapply decode_word_lt; eauto.
+  eapply decode_word_lt; eauto.
+  eapply PB_LengthDelimited_decode_lt; eauto.
+Qed.
+
+Inductive PB_PrimitiveType : Set :=
+| PB_fixed32 : PB_PrimitiveType
+| PB_fixed64 : PB_PrimitiveType
+| PB_int32 : PB_PrimitiveType
+| PB_int64 : PB_PrimitiveType
+(* | PB_sfixed32 : PB_PrimitiveType *)
+(* | PB_sfixed64 : PB_PrimitiveType *)
+(* | PB_bool : PB_PrimitiveType *)
+| PB_string : PB_PrimitiveType
+.
+
+Definition PB_PrimitiveType_toWireType (pty : PB_PrimitiveType) : PB_WireType :=
+  match pty with
+  | PB_fixed32 => PB_32bit
+  | PB_fixed64 => PB_64bit
+  | PB_int32 => PB_Varint
+  | PB_int64 => PB_Varint
+  | PB_string => PB_LengthDelimited
+  end.
+
+Definition PB_PrimitiveType_denote (pty : PB_PrimitiveType) : Type :=
+  PB_WireType_denote (PB_PrimitiveType_toWireType pty).
+Arguments PB_PrimitiveType_denote /.
+
+Definition PB_PrimitiveType_default (pty : PB_PrimitiveType) : PB_PrimitiveType_denote pty :=
+  PB_WireType_default (PB_PrimitiveType_toWireType pty).
+Arguments PB_PrimitiveType_default /.
+
+Inductive PB_SingularType : Set :=
+| PB_Primitive : PB_PrimitiveType -> PB_SingularType
+| PB_Embedded : PB_Message -> PB_SingularType
+
+with PB_Type : Set :=
+     | PB_Singular : PB_SingularType -> PB_Type
+     | PB_Repeated : PB_SingularType -> PB_Type
+
+with PB_Field : Set :=
+     | Build_PB_Field : PB_Type -> string -> N -> PB_Field
+
+with PB_Message : Set :=
+     | Build_PB_Message : forall {n}, Vector.t PB_Field n -> PB_Message.
+
+Definition PB_FieldType (fld : PB_Field) := let (ty, _, _) := fld in ty.
+Definition PB_FieldName (fld : PB_Field) := let (_, name, _) := fld in name.
+Definition PB_FieldTag (fld : PB_Field) := let (_, _, tag) := fld in tag.
+
+Definition PB_Desc := Vector.t PB_Field.
+
+Definition PB_MessageLen (desc : PB_Message) :=
+  let (n, _) := desc in n.
+
+Definition PB_MessageDesc (desc : PB_Message) :=
+  let (_, v) return (Vector.t _ (PB_MessageLen desc)) := desc in v.
+
+Definition PB_Message_tags (desc : PB_Message) :=
+  Vector.map PB_FieldTag (PB_MessageDesc desc).
+
+Definition PB_Message_heading' denote (desc : PB_Message) :=
+  BuildHeading (Vector.map denote (PB_MessageDesc desc)).
+Arguments PB_Message_heading' /.
+
+Fixpoint PB_Type_denote (ty : PB_Type) : Type :=
+  match ty with
+  | PB_Singular sty =>
+    match sty with
+    | PB_Primitive pty => PB_PrimitiveType_denote pty
+    | PB_Embedded desc => option (PB_Message_denote desc)
+    end
+  | PB_Repeated sty =>
+    match sty with
+    | PB_Primitive pty => list (PB_PrimitiveType_denote pty)
+    | PB_Embedded desc => list (PB_Message_denote desc)
+    end
+  end
+
+with PB_Field_denote (fld : PB_Field) : Attribute :=
+       ((PB_FieldName fld) :: PB_Type_denote (PB_FieldType fld))%Attribute
+
+with PB_Message_denote (desc : PB_Message) : Type :=
+       @Tuple (PB_Message_heading' PB_Field_denote desc).
+
+Definition PB_Message_heading := PB_Message_heading' PB_Field_denote.
+
 Definition PB_Type_default (ty : PB_Type) : PB_Type_denote ty :=
   match ty with
-  | PB_Singular sty => match sty with
-                      | PB_fixed32 => wzero 32
-                      | PB_fixed64 => wzero 64
-                      | PB_int32 => 0%N
-                      | PB_int64 => 0%N
-                      end
-  | PB_Repeated sty => []
+  | PB_Singular sty =>
+    match sty with
+    | PB_Primitive pty => PB_PrimitiveType_default pty
+    | PB_Embedded _ => None
+    end
+  | PB_Repeated sty =>
+    match sty with
+    | PB_Primitive _ => nil
+    | PB_Embedded _ => nil
+    end
   end.
 
-Definition PB_Type_toWireType (ty : PB_Type) : PB_WireType :=
-  match ty with
-  | PB_Singular sty => match sty with
-                          | PB_fixed32 => PB_32bit
-                          | PB_fixed64 => PB_64bit
-                          | PB_int32 => PB_Varint
-                          | PB_int64 => PB_Varint
-                          end
-  | PB_RepeatedType => PB_LengthDelimited
-  end.
+Fixpoint PB_Message_default' {n} (desc : PB_Desc n) : PB_Message_denote (Build_PB_Message desc).
+Proof.
+  refine
+    (match desc return (PB_Message_denote (Build_PB_Message desc)) with
+     | Vector.nil => inil2 (B:=id)
+     | Vector.cons fld _ desc' =>
+       icons2 (B:=id) _ (PB_Message_default' _ desc')
+     end).
+  destruct fld as [ty ? ?].
+  exact (PB_Type_default ty).
+Defined.
 
-Record PB_Field := 
-  { PB_FieldType : PB_Type;
-    PB_FieldName : string;
-    PB_FieldTag : N }.
-
-Definition PB_Field_denote (fld : PB_Field) :=
-  match fld with
-  | {| PB_FieldType := ty; PB_FieldName := name |} =>
-    (name :: PB_Type_denote ty)%Attribute
-  end.
+Definition PB_Message_default (desc : PB_Message) := PB_Message_default' (PB_MessageDesc desc).
 
 Definition PB_FieldTag_OK (t : N) :=
   ((1 <= t <= 18999) \/ (20000 <= t <= 536870911))%N.
@@ -360,22 +450,12 @@ Definition PB_Field_OK (fld : PB_Field) :=
   PB_FieldName_OK (PB_FieldName fld) /\
   PB_FieldTag_OK (PB_FieldTag fld).
 
-Definition PB_Message := Vector.t PB_Field.
-
-Definition PB_Message_heading {n} (desc : PB_Message n) :=
-  (BuildHeading (Vector.map PB_Field_denote desc)).
-
-Definition PB_Message_denote {n} (desc : PB_Message n) :=
-  @Tuple (PB_Message_heading desc).
-
-Definition PB_Message_tags {n} (desc : PB_Message n) :=
-  Vector.map PB_FieldTag desc.
-
 (* :TODO: abstract out this proof as ltac. *)
-Lemma PB_Message_tags_correct {n} (desc : PB_Message n)
+Lemma PB_Message_tags_correct (desc : PB_Message)
   : forall i, Vector.nth (PB_Message_tags desc) i
-         = PB_FieldTag (Vector.nth desc i).
+         = PB_FieldTag (Vector.nth (PB_MessageDesc desc) i).
 Proof.
+  destruct desc as [n desc]. simpl in *.
   induction desc; intros.
   - inversion i.
   - revert desc IHdesc. pattern n, i.
@@ -384,20 +464,11 @@ Proof.
     + apply IHdesc.
 Qed.
 
-Fixpoint PB_Message_default {n} (desc : PB_Message n) : PB_Message_denote desc :=
-  match desc with
-  | Vector.nil => inil2 (B:=id)
-  | Vector.cons fld _ desc' => match fld with
-                              | {| PB_FieldType := ty |} =>
-                                icons2 (B:=id) (PB_Type_default ty)
-                                            (PB_Message_default desc')
-                              end
-  end.
-
-Lemma PB_denote_type_eq {n} (desc : PB_Message n) (i : Fin.t n)
-  : PB_Type_denote (PB_FieldType (Vector.nth desc i))
+Lemma PB_denote_type_eq (desc : PB_Message) (i : Fin.t (PB_MessageLen desc))
+  : PB_Type_denote (PB_FieldType (Vector.nth (PB_MessageDesc desc) i))
     = Domain (PB_Message_heading desc) i.
 Proof.
+  destruct desc as [n desc]. simpl in *.
   induction desc; intros.
   - inversion i.
   - revert desc IHdesc. pattern n, i.
@@ -406,12 +477,13 @@ Proof.
     + apply IHdesc.
 Defined.
 
-Lemma PB_Message_default_correct {n} (desc : PB_Message n)
-  : forall (i : Fin.t n),
+Lemma PB_Message_default_correct (desc : PB_Message)
+  : forall (i : Fin.t (PB_MessageLen desc)),
     type_cast (PB_denote_type_eq desc i)
-              (PB_Type_default (PB_FieldType (Vector.nth desc i)))
+              (PB_Type_default (PB_FieldType (Vector.nth (PB_MessageDesc desc) i)))
     = ith2 (PB_Message_default desc) i.
 Proof.
+  destruct desc as [n desc]. simpl in *.
   induction desc; intros.
   - inversion i.
   - revert desc IHdesc. pattern n, i.
@@ -420,42 +492,40 @@ Proof.
     + apply IHdesc.
 Qed.
 
-Lemma PB_Message_default_correct' {n} (desc : PB_Message n)
-  : forall (i : Fin.t n),
-    PB_Type_default (PB_FieldType (Vector.nth desc i))	
-    ~= ith2 (PB_Message_default desc) i.
-Proof.
-  induction desc; intros.
-  - inversion i.
-  - revert desc IHdesc. pattern n, i.
-    apply Fin.caseS; intros; destruct h; simpl.
-    + reflexivity.
-    + apply IHdesc.
-Qed.
-
-Definition PB_Message_tags_nodup {n} (desc : PB_Message n) :=
-  forall i1 i2 : Fin.t n,
+Definition PB_Message_tags_nodup (desc : PB_Message) :=
+  forall i1 i2 : Fin.t (PB_MessageLen desc),
     Vector.nth (PB_Message_tags desc) i1 = Vector.nth (PB_Message_tags desc) i2 ->
     i1 = i2.
 
-Definition PB_Message_names_nodup {n} (desc : PB_Message n) :=
-  forall i1 i2 : Fin.t n,
-    PB_FieldName (Vector.nth desc i1) = PB_FieldName (Vector.nth desc i2) ->
+Definition PB_Message_names_nodup (desc : PB_Message) :=
+  forall i1 i2 : Fin.t (PB_MessageLen desc),
+    PB_FieldName (Vector.nth (PB_MessageDesc desc) i1) = PB_FieldName (Vector.nth (PB_MessageDesc desc) i2) ->
     i1 = i2.
 
-Definition PB_Message_OK {n} (desc : PB_Message n) :=
-  Vector.Forall PB_Field_OK desc /\
+Definition PB_Message_OK (desc : PB_Message) :=
+  Vector.Forall PB_Field_OK (PB_MessageDesc desc) /\
   PB_Message_tags_nodup desc /\ PB_Message_names_nodup desc.
 
-Definition BoundedTag {n} (desc : PB_Message n) :=
+Definition BoundedTag (desc : PB_Message) :=
   BoundedIndex (PB_Message_tags desc).
 
-Theorem BoundedTag_inj {n} (desc : PB_Message n)
+Record UnboundedIndex {A} {n : nat} (Bound : Vector.t A n) :=
+  { uindex : A;
+    uboundi : ~ Vector.In uindex Bound
+  }.
+
+Global Arguments uindex {A n Bound} u.
+
+Definition UnboundedTag (desc : PB_Message) :=
+  UnboundedIndex (PB_Message_tags desc).
+
+Theorem BoundedTag_inj (desc : PB_Message)
   : PB_Message_OK desc ->
     forall t1 t2 : BoundedTag desc,
       bindex t1 = bindex t2 -> t1 = t2.
 Proof.
   unfold PB_Message_OK, PB_Message_tags_nodup.
+  destruct desc as [n desc].
   intros [_ [? _]]; intros. destruct t1, t2. destruct indexb, indexb0.
   simpl in *. subst. apply H in H0. subst. reflexivity.
 Qed.
@@ -469,14 +539,15 @@ Proof.
     auto.
 Qed.
 
-Theorem PB_Field_inj {n} (desc : PB_Message n)
+Theorem PB_Field_inj (desc : PB_Message)
   : PB_Message_OK desc ->
     forall fld1 fld2 : PB_Field,
-      Vector.In fld1 desc -> Vector.In fld2 desc ->
+      Vector.In fld1 (PB_MessageDesc desc) -> Vector.In fld2 (PB_MessageDesc desc) ->
       PB_FieldTag fld1 = PB_FieldTag fld2 ->
       fld1 = fld2.
 Proof.
   unfold PB_Message_OK, PB_Message_tags_nodup.
+  destruct desc as [n desc].
   intros [_ [? _]]; intros.
   destruct (vector_in_fin _ _ H0).
   destruct (vector_in_fin _ _ H1).
@@ -496,7 +567,7 @@ Proof.
     intros. simpl in *. constructor. apply IHi.
 Qed.
 
-Theorem BoundedTag_in {n} (desc : PB_Message n)
+Theorem BoundedTag_in (desc : PB_Message)
   : forall t1 : BoundedTag desc, Vector.In (bindex t1) (PB_Message_tags desc).
 Proof.
   intros. destruct t1. destruct indexb. simpl in *.
@@ -504,27 +575,18 @@ Proof.
 Qed.
 
 Fixpoint PB_Message_boundedTag' {n} (tags : Vector.t N n) (m : N)
-  : (BoundedIndex tags) + {~ Vector.In m tags}.
+  : {ibound : _ | Vector.nth tags ibound = m} + {~ Vector.In m tags}.
 Proof.
   refine
     (match tags with
      | Vector.nil => inright _
      | Vector.cons t n' tags' =>
        if N.eq_dec t m then
-         inleft
-           {| bindex := m;
-              indexb := {| ibound := Fin.F1;
-                           boundi := _ |} |}
+         inleft (exist _ Fin.F1 _)
        else
          match PB_Message_boundedTag' n' tags' m with
-         | inleft
-             {| bindex := m';
-                indexb := {| ibound := i;
-                             boundi := _ |} |} =>
-           inleft
-             {| bindex := m';
-                indexb := {| ibound := Fin.FS i;
-                             boundi := _|} |}
+         | inleft (exist i _) =>
+           inleft (exist _ (Fin.FS i) _)
          | inright _ => inright _
          end
      end); auto.
@@ -534,85 +596,71 @@ Proof.
        subst; congruence).
 Defined.
 
-Definition PB_Message_boundedTag {n} (desc : PB_Message n) (m : N)
-  : (BoundedTag desc) + {~ Vector.In m (PB_Message_tags desc)} :=
-  PB_Message_boundedTag' (PB_Message_tags desc) m.
+Definition PB_Message_boundedTag (desc : PB_Message) (m : N)
+  : (BoundedTag desc) + (UnboundedTag desc) :=
+  match PB_Message_boundedTag' (PB_Message_tags desc) m with
+  | inleft (exist i pf) => inl {| bindex := m; indexb := {| ibound := i; boundi := pf |} |}
+  | inright pf => inr {| uindex := m; uboundi := pf |}
+  end.
 
-Theorem PB_Message_boundedTag_correct {n} (desc : PB_Message n) (m : N)
-  : forall tag, PB_Message_boundedTag desc m = inleft tag -> bindex tag = m.
+Theorem PB_Message_boundedTag_correct (desc : PB_Message) (m : N)
+  : forall tag, PB_Message_boundedTag desc m = inl tag -> bindex tag = m.
 Proof.
-  unfold BoundedTag. unfold PB_Message_boundedTag.
-  remember (PB_Message_tags desc) as tags.
-  induction tags; intros.
-  - inversion H.
-  - revert tags Heqtags tag H IHtags.
-    pattern n, desc. apply caseS. intros.
-    inversion Heqtags.
-    existT_eq_dec.
-    specialize (IHtags t H2).
-    inversion H. destruct (N.eq_dec _ _).
-    + inversion H3; auto.
-    + destruct (PB_Message_boundedTag' tags m);
-        try solve [inversion H3].
-      destruct b, indexb. destruct tag, indexb.
-      simpl. rewrite <- boundi0.
-      revert t tags Heqtags boundi0 H ibound boundi IHtags H2 H3.
-      pattern n0, ibound0. apply Fin.caseS; intros; inversion H3.
-      simpl. simpl in boundi0.
-      specialize
-        (IHtags {| bindex := bindex0;
-                   indexb := {| ibound := p;
-                                boundi := boundi0 |} |}).
-      simpl in IHtags.
-      rewrite boundi0. apply IHtags.
-      inversion H3.
-      existT_eq_dec.
-      f_equal.
-      revert boundi IHtags H3.
-      rewrite H6, H7.
-      intros. f_equal. f_equal.
-      apply UIP_dec. apply N.eq_dec.
+  unfold PB_Message_boundedTag.
+  intros. destruct PB_Message_boundedTag'; try easy.
+  destruct s. inversion H. reflexivity.
 Qed.
 
-Definition PB_Message_tagToIndex {n} {desc : PB_Message n}
+Theorem PB_Message_boundedTag_correct' (desc : PB_Message) (m : N)
+  : forall tag, PB_Message_boundedTag desc m = inr tag -> uindex tag = m.
+Proof.
+  unfold PB_Message_boundedTag.
+  intros. destruct PB_Message_boundedTag'. destruct s.
+  easy. inversion H. reflexivity.
+Qed.
+
+Definition PB_Message_tagToIndex {desc : PB_Message}
          (tag : BoundedTag desc) :=
   ibound (indexb tag).
 Arguments PB_Message_tagToIndex /.
 
-Theorem PB_Message_tagToIndex_correct {n} (desc : PB_Message n)
+Theorem PB_Message_tagToIndex_correct (desc : PB_Message)
         (tag : BoundedTag desc)
-  : PB_FieldTag (Vector.nth desc (PB_Message_tagToIndex tag))
+  : PB_FieldTag (Vector.nth (PB_MessageDesc desc) (PB_Message_tagToIndex tag))
     = bindex tag.
 Proof.
+  destruct desc as [n desc].
   rewrite <- PB_Message_tags_correct.
   destruct tag. destruct indexb.
   eauto.
 Qed.
 
-Theorem PB_Message_tagToIndex_correct' {n} (desc : PB_Message n)
+Theorem PB_Message_tagToIndex_correct' (desc : PB_Message)
         (tag : BoundedTag desc)
   : PB_Message_OK desc ->
-    forall fld, Vector.In fld desc ->
+    forall fld, Vector.In fld (PB_MessageDesc desc) ->
            PB_FieldTag fld = bindex tag ->
-           fld = Vector.nth desc (PB_Message_tagToIndex tag).
+           fld = Vector.nth (PB_MessageDesc desc) (PB_Message_tagToIndex tag).
 Proof.
-  intros. destruct tag. destruct indexb.
+  intros. destruct desc as [n desc].
+  destruct tag. destruct indexb.
   destruct desc; intros; try easy.
+  simpl in ibound.
   revert desc boundi H fld H0 H1. pattern n, ibound.
   apply Fin.caseS; intros; simpl in *.
   - subst. eapply PB_Field_inj; eauto. constructor.
   - eapply PB_Field_inj; eauto. constructor. apply vector_in.
-    subst. rewrite <- PB_Message_tags_correct. auto.
+    subst. rewrite <- (PB_Message_tags_correct (Build_PB_Message desc)). auto.
 Qed.
 
-Definition PB_Message_tagToType {n} {desc : PB_Message n}
+Definition PB_Message_tagToType {desc : PB_Message}
            (tag : BoundedTag desc) :=
-  PB_FieldType (Vector.nth desc (PB_Message_tagToIndex tag)).
+  PB_FieldType (Vector.nth (PB_MessageDesc desc) (PB_Message_tagToIndex tag)).
 
-Theorem PB_Message_tagToType_correct {n} (desc : PB_Message n)
+Theorem PB_Message_tagToType_correct (desc : PB_Message)
         (tag : BoundedTag desc)
   : PB_Message_OK desc ->
-    forall fld, Vector.In fld desc ->
+    forall fld, Vector.In fld (PB_MessageDesc desc) ->
            PB_FieldTag fld = bindex tag ->
            PB_FieldType fld = PB_Message_tagToType tag.
 Proof.
@@ -620,11 +668,11 @@ Proof.
   rewrite (PB_Message_tagToIndex_correct' desc tag H fld); eauto.
 Qed.
 
-Definition PB_Message_tagToDenoteType {n} {desc : PB_Message n}
+Definition PB_Message_tagToDenoteType {desc : PB_Message}
            (tag : BoundedTag desc) :=
   Domain (PB_Message_heading desc) (PB_Message_tagToIndex tag).
 
-Theorem PB_Message_tagToDenoteType_correct {n} (desc : PB_Message n)
+Theorem PB_Message_tagToDenoteType_correct (desc : PB_Message)
         (tag : BoundedTag desc)
   : PB_Type_denote (PB_Message_tagToType tag)
     = PB_Message_tagToDenoteType tag.
@@ -632,31 +680,56 @@ Proof.
   apply PB_denote_type_eq.
 Qed.
 
-Definition PB_Message_lookup {n} {desc : PB_Message n}
-           (msg : PB_Message_denote desc) (tag : BoundedTag desc) :=
-  GetAttributeRaw msg (PB_Message_tagToIndex tag).
+(* Definition PB_Message_lookup {desc : PB_Message} *)
+(*            (msg : PB_Message_denote (Build_PB_Message (PB_MessageDesc desc))) *)
+(*            (tag : BoundedTag desc) := *)
+(*   type_cast_r (PB_Message_tagToDenoteType_correct desc tag) *)
+(*               (GetAttributeRaw msg (PB_Message_tagToIndex tag)). *)
 
-Definition PB_Message_update' {n} {desc : PB_Message n}
-           (msg : PB_Message_denote desc) (tag : BoundedTag desc)
-           (value : Domain (PB_Message_heading desc)
-                           (PB_Message_tagToIndex tag))
-  : PB_Message_denote desc :=
-  SetAttributeRaw msg (PB_Message_tagToIndex tag) value.
+Definition PB_Message_lookup' {n} {desc : PB_Desc n}
+           (msg : PB_Message_denote (Build_PB_Message desc))
+           (tag : BoundedTag (Build_PB_Message desc)) :=
+  type_cast_r (PB_Message_tagToDenoteType_correct (Build_PB_Message desc) tag)
+              (GetAttributeRaw msg (PB_Message_tagToIndex tag)).
 
-Definition PB_Message_update {n} {desc : PB_Message n}
-           (msg : PB_Message_denote desc) (tag : BoundedTag desc)
+Definition PB_Message_lookup {desc : PB_Message} :=
+  match desc return PB_Message_denote desc ->
+                    forall tag : BoundedTag desc,
+                      PB_Type_denote (PB_Message_tagToType tag) with
+  | Build_PB_Message _ v =>
+    fun msg tag => @PB_Message_lookup' _ v msg tag
+  end.
+
+(* Definition PB_Message_update {desc : PB_Message} *)
+(*            (msg : PB_Message_denote (Build_PB_Message (PB_MessageDesc desc))) *)
+(*            (tag : BoundedTag desc) *)
+(*            (value : PB_Type_denote (PB_Message_tagToType tag)) *)
+(*   : PB_Message_denote (Build_PB_Message (PB_MessageDesc desc)) := *)
+(*   SetAttributeRaw msg (PB_Message_tagToIndex tag) *)
+(*                   (type_cast *)
+(*                      (PB_Message_tagToDenoteType_correct *)
+(*                         desc tag) *)
+(*                      value). *)
+
+Definition PB_Message_update' {n} {desc : PB_Desc n}
+           (msg : PB_Message_denote (Build_PB_Message desc))
+           (tag : BoundedTag (Build_PB_Message desc))
            (value : PB_Type_denote (PB_Message_tagToType tag))
-  : PB_Message_denote desc :=
+  : PB_Message_denote (Build_PB_Message desc) :=
   SetAttributeRaw msg (PB_Message_tagToIndex tag)
                   (type_cast
                      (PB_Message_tagToDenoteType_correct
-                        desc tag)
+                        (Build_PB_Message desc) tag)
                      value).
 
-Record PB_IRElm :=
-  { PB_IRTag : N;
-    PB_IRType : PB_Type;
-    PB_IRVal : PB_Type_denote PB_IRType }.
+Definition PB_Message_update {desc : PB_Message} :=
+  match desc return PB_Message_denote desc ->
+                    forall tag : BoundedTag desc,
+                      PB_Type_denote (PB_Message_tagToType tag) ->
+                      PB_Message_denote desc with
+  | Build_PB_Message _ v =>
+    fun msg tag value => PB_Message_update' msg tag value
+  end.
 
 Definition PB_IRElm_OK {n} (desc : PB_Message n) (elm : PB_IRElm) :=
   match PB_Message_boundedTag desc (PB_IRTag elm) with
