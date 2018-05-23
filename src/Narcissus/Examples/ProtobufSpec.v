@@ -183,77 +183,138 @@ Proof.
   erewrite SizedList_format_byte; eauto.
 Qed.
 
-Inductive PB_Type : Set :=
-| PB_Singular : PB_SingularType -> PB_Type
-| PB_Repeated : PB_SingularType -> PB_Type
-.
+Inductive PB_WireType : Set :=
+| PB_Varint : PB_WireType
+| PB_32bit : PB_WireType
+| PB_64bit : PB_WireType
+| PB_LengthDelimited : PB_WireType.
 
-Definition PB_Type_eq_dec
-  : forall t1 t2 : PB_Type, {t1 = t2} + {t1 <> t2}.
+Definition PB_WireType_eq_dec (w1 w2 : PB_WireType)
+  : {w1 = w2} + {w1 <> w2}.
 Proof.
-  repeat decide equality.
+  decide equality.
 Defined.
 
-Definition PB_Type_denote (ty : PB_Type) : Type :=
-  match ty with
-  | PB_Singular sty => PB_SingularType_denote sty
-  | PB_Repeated sty => PB_RepeatedType_denote sty
+Definition PB_WireType_denote (wty : PB_WireType) : Type :=
+  match wty with
+  | PB_Varint => N
+  | PB_32bit => word 32
+  | PB_64bit => word 64
+  | PB_LengthDelimited => list char
   end.
 
-Definition PB_Type_format (ty : PB_Type) : FormatM (PB_Type_denote ty) ByteString :=
-  match ty with
-  | PB_Singular sty => PB_SingularType_format sty
-  | PB_Repeated sty => PB_RepeatedType_format sty
+Definition PB_WireType_val (wty : PB_WireType) : N :=
+  match wty with
+  | PB_Varint => 0
+  | PB_32bit => 5
+  | PB_64bit => 1
+  | PB_LengthDelimited => 2
   end.
 
-(* :TODO: extend decode_step *)
-Definition PB_Type_decoder
-        (ty : PB_Type)
+Definition PB_WireType_val_inv (n : N)
+  : PB_WireType + {forall wty, PB_WireType_val wty <> n}.
+Proof.
+  refine
+    (match n with
+     | 0 => inleft PB_Varint
+     | 5 => inleft PB_32bit
+     | 1 => inleft PB_64bit
+     | 2 => inleft PB_LengthDelimited
+     | _ => inright _
+     end)%N;
+    abstract (destruct wty; inversion 1).
+Defined.
+
+Theorem PB_WireType_val_3bits (wty : PB_WireType)
+  : N.lt (N.log2 (PB_WireType_val wty)) 3%N.
+Proof.
+  destruct wty; easy.
+Qed.
+
+Definition PB_WireType_default (wty : PB_WireType) : PB_WireType_denote wty :=
+  match wty with
+  | PB_Varint => 0%N
+  | PB_32bit => wzero 32
+  | PB_64bit => wzero 64
+  | PB_LengthDelimited => []
+  end.
+
+Definition PB_WireType_format (wty : PB_WireType)
+  : FormatM (PB_WireType_denote wty) ByteString :=
+  match wty with
+  | PB_32bit => format_word
+  | PB_64bit => format_word
+  | PB_Varint => Varint_format
+  | PB_LengthDelimited => PB_LengthDelimited_format format_word
+  end.
+
+Definition PB_WireType_decoder
+           (wty : PB_WireType)
   : { decode : _ |
       forall {P : CacheDecode -> Prop}
         (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b))),
         CorrectDecoder _
                        (fun _ => True)
                        (fun _ _ => True)
-                       (PB_Type_format ty) decode P }.
+                       (PB_WireType_format wty) decode P }.
 Proof.
   let d := fill_ind_h
-             (PB_Type_rect
-                (fun ty => DecodeM (PB_Type_denote ty)
-                                ByteString)) in
-  refine (exist _ (d ty) _).
+             (PB_WireType_rect
+                (fun pty => DecodeM (PB_WireType_denote pty)
+                                 ByteString)) in
+  refine (exist _ (d wty) _).
 
-  intros; destruct ty; simpl;
-    [apply PB_SingularType_decode_correct |
-     apply PB_RepeatedType_decode_correct];
+  intros; destruct wty; simpl;
     repeat decode_step idtac.
+  apply Varint_decode_correct; repeat decode_step idtac.
+  eapply shrink_format_correct_True; eauto.
+  apply PB_LengthDelimited_decode_correct; repeat decode_step idtac.
+  apply word_format_sz_eq. intros. eapply word_format_byte; eauto; eauto.
+  intuition. intros. apply SizedList_predicate_rest_True.
+  Grab Existential Variables.
+  apply decode_word_lt.
 Defined.
 
-Definition PB_Type_decode (ty : PB_Type) :=
-  Eval simpl in proj1_sig (PB_Type_decoder ty).
+Definition PB_WireType_decode (wty : PB_WireType) :=
+  Eval simpl in proj1_sig (PB_WireType_decoder wty).
 
-Definition PB_Type_decode_correct (ty : PB_Type) :=
-  Eval simpl in proj2_sig (PB_Type_decoder ty).
-
-Theorem PB_Type_format_sz_eq (ty : PB_Type)
-  : forall d b1 b2 ce1 ce1' ce2 ce2',
-    PB_Type_format ty d ce1 ↝ (b1, ce1') ->
-    PB_Type_format ty d ce2 ↝ (b2, ce2') ->
-    bin_measure b1 = bin_measure b2.
+Theorem PB_WireType_decode_correct (wty : PB_WireType)
+        {P : CacheDecode -> Prop}
+        (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b)))
+  : CorrectDecoder
+      _ (fun _ => True) (fun _ _ => True)
+      (PB_WireType_format wty) (PB_WireType_decode wty) P.
 Proof.
-  unfold PB_Type_format; intros; destruct ty;
-    [eapply PB_SingularType_format_sz_eq | eapply PB_RepeatedType_format_sz_eq];
-    eauto.
+  apply (proj2_sig (PB_WireType_decoder wty)). auto.
 Qed.
 
-Theorem PB_Type_format_byte (ty : PB_Type)
+Theorem PB_WireType_format_sz_eq (wty : PB_WireType)
+  : forall d b1 b2 ce1 ce1' ce2 ce2',
+    PB_WireType_format wty d ce1 ↝ (b1, ce1') ->
+    PB_WireType_format wty d ce2 ↝ (b2, ce2') ->
+    bin_measure b1 = bin_measure b2.
+Proof.
+  unfold PB_WireType_format; intros.
+  destruct wty.
+  eapply Varint_format_sz_eq; eauto.
+  eapply word_format_sz_eq; eauto.
+  eapply word_format_sz_eq; eauto.
+  eapply PB_LengthDelimited_format_sz_eq; eauto.
+  eapply word_format_sz_eq; eauto.
+Qed.
+
+Theorem PB_WireType_format_byte (wty : PB_WireType)
   : forall d b ce ce',
-    PB_Type_format ty d ce ↝ (b, ce') ->
+    PB_WireType_format wty d ce ↝ (b, ce') ->
     bin_measure b mod 8 = 0.
 Proof.
-  unfold PB_Type_format. destruct ty.
-  apply PB_SingularType_format_byte.
-  apply PB_RepeatedType_format_byte.
+  unfold PB_WireType_format.
+  destruct wty; intros.
+  eapply Varint_format_byte; eauto.
+  eapply word_format_byte; eauto; eauto.
+  eapply word_format_byte; eauto; eauto.
+  eapply PB_LengthDelimited_format_byte; eauto.
+  intros. eapply word_format_byte; eauto; eauto.
 Qed.
 
 Definition PB_Type_default (ty : PB_Type) : PB_Type_denote ty :=
