@@ -748,60 +748,397 @@ Definition PB_Message_update {desc : PB_Message} :=
     fun msg tag value => PB_Message_update' msg tag value
   end.
 
-Definition PB_IRElm_OK {n} (desc : PB_Message n) (elm : PB_IRElm) :=
-  match PB_Message_boundedTag desc (PB_IRTag elm) with
-  | inleft tag => PB_Message_tagToType tag = PB_IRType elm
-  | _ => False
+Lemma N_shiftr_lor_shiftl
+  : forall a b n, N.lt (N.log2 b) n ->
+             a = N.shiftr (N.lor (N.shiftl a n) b) n.
+Proof.
+  intros. rewrite N.shiftr_lor.
+  rewrite N.shiftr_shiftl_r by apply N.le_refl.
+  rewrite (N.shiftr_eq_0 b); auto.
+  rewrite N.sub_diag.
+  symmetry.
+  apply N.lor_0_r.
+Qed.
+
+Lemma N_land_lor_shiftl
+  : forall a b n, N.lt (N.log2 b) n ->
+             b = N.land (N.lor (N.shiftl a n) b) (N.ones n).
+Proof.
+  intros.
+  rewrite N.land_lor_distr_l.
+  rewrite N.land_ones.
+  rewrite N.shiftl_mul_pow2.
+  rewrite N.mod_mul by (apply N.pow_nonzero; easy).
+  rewrite N.land_ones_low by auto.
+  apply N.lor_0_l.
+Qed.
+
+Lemma decides_N_eq
+  : forall (n n' : N),
+    decides (N.eqb n n') (n = n').
+Proof.
+  unfold decides, If_Then_Else; intros;
+    destruct (N.eqb_spec n n'); auto.
+Qed.
+Hint Resolve decides_N_eq : decide_data_invariant_db.
+
+Inductive PB_IRElm : Type :=
+| Build_PB_IRElm : N ->
+                   forall PB_IRType : PB_WireType,
+                     PB_WireType_denote PB_IRType +
+                     list (PB_WireType_denote PB_IRType) +
+                     list PB_IRElm ->
+                     PB_IRElm.
+
+Definition PB_IRTag (elm : PB_IRElm) :=
+  let (t, _, _) := elm in t.
+
+Definition PB_IRType (elm : PB_IRElm) :=
+  let (_, ty, _) := elm in ty.
+
+Definition PB_IRVal (elm : PB_IRElm) :=
+  let (_, ty, v)
+      return (PB_WireType_denote (PB_IRType elm) +
+              list (PB_WireType_denote (PB_IRType elm)) +
+              list PB_IRElm) := elm in v.
+
+Fixpoint PB_IRElm_OK (desc : PB_Message) (elm : PB_IRElm) :=
+  match elm with
+  | Build_PB_IRElm t ty val =>
+    match PB_Message_boundedTag desc t with
+    | inl tag =>
+      match PB_Message_tagToType tag with
+      | PB_Singular (PB_Primitive pty) =>
+        match val with
+        | inl (inl _) => PB_PrimitiveType_toWireType pty = ty
+        | _ => False
+        end
+      | PB_Repeated (PB_Primitive pty) =>
+        match val with
+        | inl (inl _) => PB_PrimitiveType_toWireType pty = ty
+        | inl (inr _) => PB_PrimitiveType_toWireType pty = ty /\ ty <> PB_LengthDelimited
+        | _ => False
+        end
+      | PB_Singular (PB_Embedded desc')
+      | PB_Repeated (PB_Embedded desc') =>
+        match val with
+        | inr ir =>
+          ty = PB_LengthDelimited /\
+          (fix IR_OK ir :=
+             match ir with
+             | nil => True
+             | elm' :: ir' => PB_IRElm_OK desc' elm' /\ IR_OK ir'
+             end) ir
+        | _ => False
+        end
+      end
+    | inr tag =>
+      match val with
+      | inl (inl _) => True
+      | _ => False
+      end
+    end
   end.
 
-Definition PB_IRVal_format
-  : FormatM PB_IRElm ByteString :=
-  fun elm => PB_Type_format (PB_IRType elm) (PB_IRVal elm).
+Lemma PB_IRElm_OK_equiv (desc : PB_Message) (ir : list PB_IRElm)
+  : (fix IR_OK ir :=
+       match ir with
+       | nil => True
+       | elm' :: ir' => PB_IRElm_OK desc elm' /\ IR_OK ir'
+       end) ir <->
+    (forall elm, In elm ir -> PB_IRElm_OK desc elm).
+Proof.
+  split. {
+    induction ir; intros. easy. intuition.
+    destruct H0; subst; auto.
+  } {
+    induction ir; intros. easy. intuition.
+    apply IHir. intros. apply H.
+    intuition.
+  }
+Qed.
 
-Definition PB_IRVal_decode {n} (desc : PB_Message n)
-           (t : N) (wty : N)
+
+Definition PB_IRElm_toWireType (elm : PB_IRElm) :=
+  match PB_IRVal elm with
+  | inl (inl _) => PB_IRType elm
+  | _ => PB_LengthDelimited
+  end.
+
+Section PB_IRElm_body.
+
+  Variable format : FormatM PB_IRElm ByteString.
+  Variable decode : PB_Message -> DecodeM PB_IRElm ByteString.
+  Variable format_sz_eq : forall x b1 b2 ce1 ce1' ce2 ce2', format x ce1 ↝ (b1, ce1') ->
+                                                         format x ce2 ↝ (b2, ce2') ->
+                                                         bin_measure b1 = bin_measure b2.
+  Variable format_byte : forall d b ce ce', format d ce ↝ (b, ce') -> bin_measure b mod 8 = 0.
+  Variable decode_lt : forall desc b cd x b' cd', decode desc b cd = Some (x, b', cd') -> lt_B b' b.
+  Variable P : CacheDecode -> Prop.
+  Variable P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b)).
+  Variable decode_correct : forall desc', CorrectDecoder _ (PB_IRElm_OK desc') (fun _ _ => True) format (decode desc') P.
+
+Definition PB_IRVal_format 
+  : FormatM PB_IRElm ByteString :=
+  fun elm =>
+    match elm with
+    | Build_PB_IRElm _ ty val =>
+      match val with
+      | inl (inl v) => PB_WireType_format ty v
+      | inl (inr l) => PB_LengthDelimited_format (PB_WireType_format ty) l
+      | inr ir => PB_LengthDelimited_format format ir
+      end
+    end.
+
+(* :TODO: can we synthesize this? *)
+Definition PB_IRVal_decode
+           (desc : PB_Message)
+           (t : N) (w : N)
   : DecodeM PB_IRElm ByteString :=
   fun b cd =>
-    match PB_Message_boundedTag desc t with
-      | inleft tag =>
-        `(v, b', cd') <- PB_Type_decode (PB_Message_tagToType tag) b cd;
-          Some ({| PB_IRTag := (bindex tag);
-                   PB_IRType := (PB_Message_tagToType tag);
-                   PB_IRVal := v|}, b', cd')
-      | _ => None
-      end.
+    match PB_WireType_val_inv w with
+    | inleft wty =>
+      match PB_Message_boundedTag desc t with
+      | inl tag =>
+        match PB_Message_tagToType tag with
+        | PB_Singular (PB_Primitive pty) =>
+          if PB_WireType_eq_dec (PB_PrimitiveType_toWireType pty) wty then
+            `(v, b', cd') <- PB_WireType_decode wty b cd;
+              Some (Build_PB_IRElm t wty (inl (inl v)), b', cd')
+          else None
+        | PB_Repeated (PB_Primitive pty) =>
+          if PB_WireType_eq_dec (PB_PrimitiveType_toWireType pty) wty then
+            `(v, b', cd') <- PB_WireType_decode wty b cd;
+              Some (Build_PB_IRElm t wty (inl (inl v)), b', cd')
+          else if PB_WireType_eq_dec PB_LengthDelimited wty then
+                 let wty := (PB_PrimitiveType_toWireType pty) in
+                 `(l, b', cd') <- PB_LengthDelimited_decode (PB_WireType_decode wty) (PB_WireType_decode_lt wty) b cd;
+                   Some (Build_PB_IRElm t wty (inl (inr l)), b', cd')
+               else None
+        | PB_Singular (PB_Embedded desc')
+        | PB_Repeated (PB_Embedded desc') =>
+          if PB_WireType_eq_dec PB_LengthDelimited wty then
+            `(ir, b', cd') <- PB_LengthDelimited_decode (decode desc') (decode_lt desc') b cd;
+              Some (Build_PB_IRElm t PB_LengthDelimited (inr ir), b', cd')
+          else None
+        end
+      | inr tag =>
+        `(v, b', cd') <- PB_WireType_decode wty b cd;
+          Some (Build_PB_IRElm t wty (inl (inl v)), b', cd')
+      end
+    | inright _ => None
+    end.
 
+Local Opaque PB_LengthDelimited_decode.
 Theorem PB_IRVal_decode_correct
-        {n} (desc : PB_Message n)
-        {P : CacheDecode -> Prop}
-        (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b)))
-  : forall (t : N) (wty : N),
+        (desc : PB_Message)
+  : forall (t : N) (w : N),
     CorrectDecoder _
-                   (fun elm => PB_IRTag elm = t /\ PB_IRElm_OK desc elm)
+                   (fun elm => PB_IRTag elm = t /\
+                            PB_WireType_val (PB_IRElm_toWireType elm) = w /\
+                            PB_IRElm_OK desc elm)
                    (fun _ _ => True)
-                   PB_IRVal_format (PB_IRVal_decode desc t wty) P.
+                   PB_IRVal_format (PB_IRVal_decode desc t w) P.
 Proof.
-  unfold PB_IRElm_OK, PB_IRVal_format, PB_IRVal_decode.
+  unfold PB_IRElm_OK, PB_IRVal_format, PB_IRVal_decode, PB_IRElm_toWireType. simpl.
+  destruct desc as [n desc].
   intros. split; intros.
-  - edestruct PB_Type_decode_correct as [Ht _]. decode_step idtac.
-    edestruct Ht; clear Ht; eauto; intuition.
-    exists x. intuition. subst.
-    destruct (PB_Message_boundedTag desc (PB_IRTag data)) eqn:Heq; intuition.
-    rewrite H5. rewrite H0. simpl.
-    erewrite PB_Message_boundedTag_correct by eassumption.
-    repeat progress f_equal.
-    destruct data as [tag ty val]; destruct ty as [sty | sty]; destruct sty;
-      simpl in *; try reflexivity.
-  - destruct (PB_Message_boundedTag desc t) eqn:Heq; try solve [inversion H1].
-    decode_opt_to_inv.
-    subst; simpl.
-    erewrite PB_Message_boundedTag_correct by eassumption.
-    edestruct PB_Type_decode_correct as [_ Ht]. decode_step idtac.
-    edestruct Ht; clear Ht; eauto; intuition.
-    destruct H3 as [bin' [xenv]]. intuition.
-    exists bin', xenv. intuition.
-    rewrite Heq. auto.
+  - intuition. destruct data as [tag wty val].
+    destruct PB_WireType_val_inv eqn:?; subst;
+      rewrite PB_WireType_val_inv_correct in Heqs; [| easy].
+    simpl in *. subst.
+    destruct PB_Message_boundedTag eqn:?. {
+      destruct PB_Message_tagToType eqn:?; destruct p0.
+      - destruct val; [destruct s |]; try easy. injections.
+        destruct PB_WireType_eq_dec; [| easy].
+        edestruct PB_WireType_decode_correct as [[? [? [? ?]]] _]; eauto.
+        rewrite H0. simpl. eauto.
+      - destruct val; [easy |]. injections. intuition.
+        destruct PB_WireType_eq_dec; [| easy]. subst. 
+        edestruct (PB_LengthDelimited_decode_correct (A:=PB_IRElm))
+          as [[? [? [? ?]]] _]; eauto. instantiate (1 := p0).
+        apply PB_IRElm_OK_equiv. apply H3.
+        eapply SizedList_predicate_rest_True.
+        rewrite H0. simpl. eauto.
+      - destruct val; try easy. injections.
+        destruct PB_WireType_eq_dec.
+        + destruct s; intuition; subst; [| easy].
+          edestruct PB_WireType_decode_correct as [[? [? [? ?]]] _]; eauto.
+          rewrite H0. simpl. eauto.
+        + destruct s; try easy. destruct PB_WireType_eq_dec; try easy. intuition. subst.
+          edestruct (PB_LengthDelimited_decode_correct (A:=(PB_WireType_denote (PB_PrimitiveType_toWireType p0))))
+            as [[? [? [? ?]]] _]; eauto.
+          eapply PB_WireType_format_sz_eq; eauto.
+          eapply PB_WireType_format_byte; eauto.
+          eapply PB_WireType_decode_correct; eauto.
+          intuition. eapply SizedList_predicate_rest_True.
+          rewrite H0. simpl. eauto.
+      - destruct val; [easy |]. injections. intuition.
+        destruct PB_WireType_eq_dec; [| easy]. subst. 
+        edestruct (PB_LengthDelimited_decode_correct (A:=PB_IRElm))
+          as [[? [? [? ?]]] _]; eauto. instantiate (1 := p0).
+        apply PB_IRElm_OK_equiv. apply H3.
+        eapply SizedList_predicate_rest_True.
+        rewrite H0. simpl. eauto.
+    } {
+      destruct val; [destruct s |]; try easy. injections.
+      edestruct PB_WireType_decode_correct as [[? [? [? ?]]] _]; eauto.
+      simpl in *. rewrite H0. simpl. eauto.
+    }
+  - destruct data as [tag wty val].
+    destruct PB_WireType_val_inv eqn:?; [| easy].
+    apply PB_WireType_val_inv_correct' in Heqs.
+    simpl in *.
+    destruct PB_Message_boundedTag eqn:?. {
+      destruct PB_Message_tagToType eqn:?; destruct p0.
+      - destruct PB_WireType_eq_dec; [| easy]. decode_opt_to_inv.
+        subst. existT_eq_dec; try apply PB_WireType_eq_dec.
+        subst. simpl.
+        edestruct PB_WireType_decode_correct as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
+        intuition. eexists _, _. intuition; eauto.
+        rewrite Heqs0.
+        destruct PB_Message_tagToType; destruct p; injections; easy.
+      - destruct PB_WireType_eq_dec; [| easy]. decode_opt_to_inv.
+        subst. existT_eq_dec; try apply PB_WireType_eq_dec.
+        subst. simpl.
+        edestruct (PB_LengthDelimited_decode_correct (A:=PB_IRElm)) as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
+        intuition. eexists _, _. intuition; eauto. rewrite Heqs0.
+        destruct PB_Message_tagToType; destruct p; injections; try easy.
+        intuition. apply (PB_IRElm_OK_equiv p0). eauto.
+      - destruct PB_WireType_eq_dec. decode_opt_to_inv.
+        subst. existT_eq_dec; try apply PB_WireType_eq_dec.
+        subst. simpl.
+        edestruct PB_WireType_decode_correct as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
+        intuition. eexists _, _. intuition; eauto. rewrite Heqs0.
+        destruct PB_Message_tagToType; destruct p; injections; easy.
+        destruct PB_WireType_eq_dec; [| easy]. decode_opt_to_inv.
+        subst. existT_eq_dec; try apply PB_WireType_eq_dec.
+        subst. simpl.
+        edestruct (PB_LengthDelimited_decode_correct (A:=(PB_WireType_denote (PB_PrimitiveType_toWireType p0))))
+          as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
+        eapply PB_WireType_format_sz_eq; eauto.
+        eapply PB_WireType_format_byte; eauto.
+        eapply PB_WireType_decode_correct; eauto.
+        intuition. eexists _, _. intuition; eauto. rewrite Heqs0.
+        destruct PB_Message_tagToType; destruct p; injections; easy.
+      - destruct PB_WireType_eq_dec; [| easy]. decode_opt_to_inv.
+        subst. existT_eq_dec; try apply PB_WireType_eq_dec.
+        subst. simpl.
+        edestruct (PB_LengthDelimited_decode_correct (A:=PB_IRElm)) as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
+        intuition. eexists _, _. intuition; eauto. rewrite Heqs0.
+        destruct PB_Message_tagToType; destruct p; injections; try easy.
+        intuition. apply (PB_IRElm_OK_equiv p0). eauto.
+    } {
+      decode_opt_to_inv.
+      subst. existT_eq_dec; try apply PB_WireType_eq_dec.
+      subst. simpl.
+      edestruct PB_WireType_decode_correct as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
+      intuition. eexists _, _. intuition; eauto. rewrite Heqs0. easy.
+    }
 Qed.
+
+Definition PB_IRElm_format_body (elm : PB_IRElm) :=
+  Varint_format (N.lor
+                   (N.shiftl (PB_IRTag elm) 3)
+                   (PB_WireType_val (PB_IRElm_toWireType elm)))
+  ThenC PB_IRVal_format elm
+  DoneC.
+
+Definition PB_IRElm_body_decoder (desc : PB_Message)
+  : CorrectDecoderFor (PB_IRElm_OK desc) PB_IRElm_format_body.
+Proof.
+  unfold PB_IRElm_OK, PB_IRElm_format_body.
+  eapply Start_CorrectDecoderFor; simpl.
+  - decode_step idtac.
+    apply Varint_decode_correct.
+    decode_step idtac.
+    decode_step idtac.
+    decode_step idtac.
+    intros. apply (PB_IRVal_decode_correct desc)
+              with (t := N.shiftr proj 3)
+                   (w := N.land proj 7).
+    intros ? [? ?]. repeat split; eauto; subst.
+    apply N_shiftr_lor_shiftl. apply PB_WireType_val_3bits.
+    apply N_land_lor_shiftl. apply PB_WireType_val_3bits.
+    decode_step idtac.
+    decode_step idtac.
+  - cbv beta; synthesize_cache_invariant.
+  - cbv beta; optimize_decoder_impl.
+Defined.
+
+Definition PB_IRElm_decode_body (desc : PB_Message) :=
+  Eval simpl in fst (proj1_sig (PB_IRElm_body_decoder desc)).
+
+Definition PB_IRElm_decode_body_correct (desc : PB_Message)
+  : CorrectDecoder _
+                   (PB_IRElm_OK desc)
+                   (fun _ _ => True)
+                   PB_IRElm_format_body (PB_IRElm_decode_body desc) P.
+Proof.
+  destruct (proj2_sig (PB_IRElm_body_decoder desc)) as [? [? ?]].
+  apply H. simpl in *. auto.
+Qed.
+
+Theorem PB_IRElm_format_body_sz_eq
+  : forall x b1 b2 ce1 ce1' ce2 ce2',
+    PB_IRElm_format_body x ce1 ↝ (b1, ce1') ->
+    PB_IRElm_format_body x ce2 ↝ (b2, ce2') ->
+    bin_measure b1 = bin_measure b2.
+Proof.
+  unfold PB_IRElm_format_body. intros.
+  computes_to_inv2.
+  rewrite !(@mappend_measure _ ByteStringQueueMonoid).
+  f_equal.
+  eapply Varint_format_sz_eq; eauto.
+  f_equal.
+  unfold PB_IRVal_format in *.
+  destruct x. destruct s; try destruct s.
+  eapply PB_WireType_format_sz_eq; eauto.
+  eapply PB_LengthDelimited_format_sz_eq; [eapply PB_WireType_format_sz_eq | |]; eauto.
+  eapply PB_LengthDelimited_format_sz_eq; [eapply format_sz_eq | |]; eauto.
+Qed.
+
+Theorem PB_IRElm_format_body_byte
+  : forall d b ce ce',
+    PB_IRElm_format_body d ce ↝ (b, ce') -> bin_measure b mod 8 = 0.
+Proof.
+  unfold PB_IRElm_format_body. intros.
+  computes_to_inv2.
+  rewrite !(@mappend_measure _ ByteStringQueueMonoid).
+  rewrite <- Nat.add_mod_idemp_l by auto.
+  erewrite Varint_format_byte; eauto.
+  rewrite Nat.add_0_l.
+  rewrite <- Nat.add_mod_idemp_l by auto.
+  replace (bin_measure b1 mod 8) with 0.
+  auto.
+  symmetry.
+  unfold PB_IRVal_format in *.
+  destruct d; destruct s; try destruct s.
+  eapply PB_WireType_format_byte; eauto.
+  eapply PB_LengthDelimited_format_byte; [eapply PB_WireType_format_byte |]; eauto.
+  eapply PB_LengthDelimited_format_byte; [eapply format_byte |]; eauto.
+Qed.
+
+Theorem PB_IRElm_decode_body_lt
+  : forall desc b cd x b' cd', PB_IRElm_decode_body desc b cd = Some (x, b', cd') -> lt_B b' b.
+Proof.
+  unfold PB_IRElm_decode_body. intros.
+  decode_opt_to_inv. destruct N.eqb; [| easy]. injections.
+  apply Varint_decode_lt in H.
+  unfold PB_IRVal_decode in *.
+  repeat match goal with
+  | H : match ?a with _ => _ end = _ |- _ => destruct a
+  end; try easy; decode_opt_to_inv; subst.
+  apply PB_WireType_decode_lt in H0. unfold lt_B in *. omega.
+  apply PB_LengthDelimited_decode_lt in H0. unfold lt_B in *. omega.
+  apply PB_WireType_decode_lt in H0. unfold lt_B in *. omega.
+  apply PB_LengthDelimited_decode_lt in H0. unfold lt_B in *. omega.
+  apply PB_LengthDelimited_decode_lt in H0. unfold lt_B in *. omega.
+  apply PB_WireType_decode_lt in H0. unfold lt_B in *. omega.
+Qed.
+
+Local Transparent PB_LengthDelimited_decode.
+End PB_IRElm_body.
 
 Theorem PB_IRVal_format_sz_eq
   : forall d b1 b2 ce1 ce1' ce2 ce2',
