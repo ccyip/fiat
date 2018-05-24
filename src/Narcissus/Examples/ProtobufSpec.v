@@ -52,6 +52,7 @@ Local Arguments N.shiftl : simpl never.
 Local Arguments N.shiftr : simpl never.
 Local Arguments N.lor : simpl never.
 Local Arguments N.land : simpl never.
+Local Arguments CacheDecode : simpl never.
 
 Section LengthDelimited.
 
@@ -194,6 +195,7 @@ Definition PB_WireType_eq_dec (w1 w2 : PB_WireType)
 Proof.
   decide equality.
 Defined.
+Arguments PB_WireType_eq_dec : simpl never.
 
 Definition PB_WireType_denote (wty : PB_WireType) : Type :=
   match wty with
@@ -224,6 +226,21 @@ Proof.
      end)%N;
     abstract (destruct wty; inversion 1).
 Defined.
+
+Theorem PB_WireType_val_inv_correct (wty : PB_WireType)
+  : PB_WireType_val_inv (PB_WireType_val wty) = inleft wty.
+Proof.
+  destruct wty; eauto.
+Qed.
+
+Theorem PB_WireType_val_inv_correct' (w : N)
+  : forall wty, PB_WireType_val_inv w = inleft wty -> PB_WireType_val wty = w.
+Proof.
+  intros. unfold PB_WireType_val_inv in *.
+  repeat match goal with
+  | H : match ?w with _ => _ end = _ |- _ => destruct w; injections; auto; try easy
+  end.
+Qed.
 
 Theorem PB_WireType_val_3bits (wty : PB_WireType)
   : N.lt (N.log2 (PB_WireType_val wty)) 3%N.
