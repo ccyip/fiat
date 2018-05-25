@@ -821,6 +821,31 @@ Inductive PB_IRElm : Type :=
                      list PB_IRElm ->
                      PB_IRElm.
 
+Fixpoint PB_IRElm_ind'' (P : PB_IRElm -> Prop)
+         (f1 : forall n w s, P (Build_PB_IRElm n w (inl s)))
+         (f2 : forall n w l, Forall P l -> P (Build_PB_IRElm n w (inr l)))
+         (e : PB_IRElm)
+  : P e.
+Proof.
+  destruct e; destruct s; auto.
+  apply f2. induction l; constructor; auto.
+  apply PB_IRElm_ind''; auto.
+Defined.
+
+Section PB_IRElm_induction.
+  Variable P : PB_IRElm -> Prop.
+  Hypothesis f1 : forall n w s, P (Build_PB_IRElm n w (inl s)).
+  Hypothesis f2 : forall n w l, Forall P l -> P (Build_PB_IRElm n w (inr l)).
+
+  Fixpoint PB_IRElm_ind' (e : PB_IRElm)
+    : P e.
+  Proof.
+    destruct e. destruct s.
+    auto.
+    apply f2. induction l; auto.
+  Defined.
+End PB_IRElm_induction.
+
 Definition PB_IRTag (elm : PB_IRElm) :=
   let (t, _, _) := elm in t.
 
