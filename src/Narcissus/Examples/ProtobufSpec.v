@@ -388,6 +388,37 @@ with PB_Field : Set :=
 with PB_Message : Set :=
      | Build_PB_Message : forall {n}, Vector.t PB_Field n -> PB_Message.
 
+Scheme PB_SingularType_mut := Induction for PB_SingularType Sort Prop
+  with PB_Type_mut := Induction for PB_Type Sort Prop
+  with PB_Field_mut := Induction for PB_Field Sort Prop
+  with PB_Message_mut := Induction for PB_Message Sort Prop.
+
+Section PB_Message_induction.
+  Variable P_sty : PB_SingularType -> Prop.
+  Variable P_ty : PB_Type -> Prop.
+  Variable P_fld : PB_Field -> Prop.
+  Variable P_desc : PB_Message -> Prop.
+  Variable f0 : forall pty : PB_PrimitiveType, P_sty (PB_Primitive pty).
+  Variable f1 : forall desc : PB_Message, P_desc desc -> P_sty (PB_Embedded desc).
+  Variable f2 : forall sty : PB_SingularType, P_sty sty -> P_ty (PB_Singular sty).
+  Variable f3 : forall sty : PB_SingularType, P_sty sty -> P_ty (PB_Repeated sty).
+  Variable f4 : forall ty : PB_Type, P_ty ty -> forall (s : string) (n : N), P_fld (Build_PB_Field ty s n).
+  Variable f5 : forall (n : nat) (v : Vector.t PB_Field n), Vector.Forall P_fld v -> P_desc (Build_PB_Message v).
+
+  Fixpoint PB_SingularType_ind' (sty : PB_SingularType) : P_sty sty
+  with PB_Type_ind' (ty : PB_Type) : P_ty ty
+  with PB_Field_ind' (fld : PB_Field) : P_fld fld
+  with PB_Message_ind' (desc : PB_Message) : P_desc desc.
+  Proof.
+    destruct sty. apply f0. apply f1. auto.
+    destruct ty. apply f2. auto. apply f3. auto.
+    destruct fld. apply f4. auto.
+    destruct desc as [n desc]. apply f5.
+    induction desc; constructor; auto.
+  Defined.
+
+End PB_Message_induction.
+
 Definition PB_FieldType (fld : PB_Field) := let (ty, _, _) := fld in ty.
 Definition PB_FieldName (fld : PB_Field) := let (_, name, _) := fld in name.
 Definition PB_FieldTag (fld : PB_Field) := let (_, _, tag) := fld in tag.
