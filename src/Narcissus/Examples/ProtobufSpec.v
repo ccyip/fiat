@@ -1203,150 +1203,18 @@ Qed.
 Local Transparent PB_LengthDelimited_decode.
 End PB_IRElm_body.
 
-Theorem PB_IRVal_format_sz_eq
-  : forall d b1 b2 ce1 ce1' ce2 ce2',
-    PB_IRVal_format d ce1 ↝ (b1, ce1') ->
-    PB_IRVal_format d ce2 ↝ (b2, ce2') ->
-    bin_measure b1 = bin_measure b2.
-Proof.
-  unfold PB_IRVal_format. destruct d.
-  apply PB_Type_format_sz_eq.
-Qed.
-
-Theorem PB_IRVal_format_byte
-  : forall d b ce ce',
-    PB_IRVal_format d ce ↝ (b, ce') ->
-    bin_measure b mod 8 = 0.
-Proof.
-  unfold PB_IRVal_format. intros.
-  destruct d.
-  eapply PB_Type_format_byte; eauto.
-Qed.
-
-Local Arguments N.shiftl : simpl never.
-Local Arguments N.shiftr : simpl never.
-Local Arguments N.lor : simpl never.
-Local Arguments N.land : simpl never.
-Definition PB_IRElm_format
-  : FormatM PB_IRElm ByteString :=
-  fun elm =>
-    Varint_format (N.lor
-                     (N.shiftl (PB_IRTag elm) 3)
-                     (PB_WireType_denote (PB_Type_toWireType (PB_IRType elm))))
-    ThenC PB_IRVal_format elm
-    DoneC.
-
-Lemma N_shiftr_lor_shiftl
-  : forall a b n, N.lt (N.log2 b) n ->
-             a = N.shiftr (N.lor (N.shiftl a n) b) n.
-Proof.
-  intros. rewrite N.shiftr_lor.
-  rewrite N.shiftr_shiftl_r by apply N.le_refl.
-  rewrite (N.shiftr_eq_0 b); auto.
-  rewrite N.sub_diag.
-  symmetry.
-  apply N.lor_0_r.
-Qed.
-
-Lemma decides_N_eq
-  : forall (n n' : N),
-    decides (N.eqb n n') (n = n').
-Proof.
-  unfold decides, If_Then_Else; intros;
-    destruct (N.eqb_spec n n'); auto.
-Qed.
-Hint Resolve decides_N_eq : decide_data_invariant_db.
-
-Local Arguments CacheDecode : simpl never.
-Definition PB_IRElm_decoder {n} (desc : PB_Message n)
-  : { decode : _ |
-      forall {P : CacheDecode -> Prop}
-        (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b))),
-        CorrectDecoder _
-                       (PB_IRElm_OK desc)
-                       (fun _ _ => True)
-                       PB_IRElm_format decode P }.
-Proof.
-  unfold PB_IRElm_OK, PB_IRElm_format.
-  eexists.
-  intros. eapply compose_format_correct;
-  unfold cache_inv_Property; intuition.
-  apply Varint_decode_correct.
-  decode_step idtac.
-  decode_step idtac.
-  decode_step idtac.
-  intros. eapply compose_format_correct.
-  unfold cache_inv_Property; intuition.
-  intros.
-  eapply (PB_IRVal_decode_correct desc)
-    with (t := N.shiftr proj 3)
-         (wty := N.land proj 7).
-  decode_step idtac.
-
-  intro. intros[? ?]. split; eauto. subst.
-  apply N_shiftr_lor_shiftl. apply PB_WireType_denote_3bits.
-
-  all : decode_step idtac.
-Defined.
-
-Definition PB_IRElm_decode {n} (desc : PB_Message n) :=
-  Eval simpl in proj1_sig (PB_IRElm_decoder desc).
-
-Definition PB_IRElm_decode_correct {n} (desc : PB_Message n) :=
-  Eval simpl in proj2_sig (PB_IRElm_decoder desc).
-
-Theorem PB_IRElm_decode_lt {n} (desc : PB_Message n)
-  : forall (b : ByteString) (cd : CacheDecode) (elm : PB_IRElm) 
-      (b' : ByteString) (cd' : CacheDecode),
-    PB_IRElm_decode desc b cd = Some (elm, b', cd') -> lt_B b' b.
-Proof.
-  intros.
-  decode_opt_to_inv.
-  destruct (N.eqb _); inversion H1; clear H1. subst.
-  edestruct (PB_IRVal_decode_correct desc (P := fun _ => True))
-            as [_ Hd].
-  unfold cache_inv_Property; intuition.
-  edestruct Hd as [_ [? [_ [_ [Hm _]]]]]; try reflexivity; eauto. clear Hd.
-  subst. apply Varint_decode_lt in H.
-  unfold lt_B in *. rewrite mappend_measure in H.
-  omega.
-  Grab Existential Variables.
-  auto.
-Qed.
-
-Theorem PB_IRElm_format_sz_eq
-  : forall d b1 b2 ce1 ce1' ce2 ce2',
-    PB_IRElm_format d ce1 ↝ (b1, ce1') ->
-    PB_IRElm_format d ce2 ↝ (b2, ce2') ->
-    bin_measure b1 = bin_measure b2.
-Proof.
-  unfold PB_IRElm_format.
-  intros.
-  computes_to_inv2.
-  rewrite !(@mempty_right _ ByteStringQueueMonoid).
-  rewrite !@mappend_measure.
-  erewrite Varint_format_sz_eq; eauto.
-  erewrite PB_IRVal_format_sz_eq with (b1:=b6) (b2:=b0); eauto.
-Qed.
-
-Theorem PB_IRElm_format_byte
-  : forall d b ce ce',
-    PB_IRElm_format d ce ↝ (b, ce') ->
-    bin_measure b mod 8 = 0.
-Proof.
-  unfold PB_IRElm_format. intros.
-  intros. computes_to_inv2.
-  apply Varint_format_byte in H.
-  apply PB_IRVal_format_byte in H'; auto.
-  repeat rewrite @mappend_measure.
-  rewrite Nat.add_mod; auto.
-  rewrite (Nat.add_mod (_ b1) (_ ByteString_id)); auto.
-  rewrite H, H'; auto.
-Qed.
+(* :TODO: *)
+(* Fixpoint PB_IRElm_decode (desc : PB_Message) (b : ByteString) (cd : CacheDecode) *)
+(*   : option (PB_IRElm * ByteString * CacheDecode). *)
+(* Proof. *)
+(*   refine (PB_IRElm_decode_body *)
+(*             PB_IRElm_decode *)
+(*             (PB_IRElm_decode_body_lt PB_IRElm_decode _) *)
+(*             desc b cd). *)
 
 Definition PB_IR := list PB_IRElm.
 
-Instance PR_IR_monoid : Monoid PB_IR :=
+Instance PB_IR_monoid : Monoid PB_IR :=
   {| mappend := @app _;
      bin_measure := @length _;
      mempty := nil;
