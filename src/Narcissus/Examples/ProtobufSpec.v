@@ -1224,21 +1224,104 @@ Instance PB_IR_monoid : Monoid PB_IR :=
      mappend_assoc := @app_assoc _
   |}.
 
-Inductive PB_IR_refine {n} {desc : PB_Message n}
-  : PB_IR -> PB_Message_denote desc -> Prop :=
-| PB_IR_nil :
+Inductive PB_IR_refine
+  : forall {desc : PB_Message}, PB_IR -> PB_Message_denote desc -> Prop :=
+| PB_IR_nil desc :
     PB_IR_refine nil
                  (PB_Message_default desc)
-| PB_IR_cons :
-    forall ir msg,
+| PB_IR_singular desc :
+    forall ir (msg : PB_Message_denote desc),
       PB_IR_refine ir msg ->
-      forall (t : BoundedTag desc)
-        (v : PB_Type_denote (PB_Message_tagToType t)),
-        PB_IR_refine ({| PB_IRTag := bindex t;
-                         PB_IRVal := v |} :: ir)
-                     (PB_Message_update msg t v).
+      forall (t : BoundedTag desc) (pty : PB_PrimitiveType)
+        (pf : PB_Message_tagToType t = PB_Singular (PB_Primitive pty))
+        (v : PB_Type_denote (PB_Singular (PB_Primitive pty))),
+        PB_IR_refine ((Build_PB_IRElm (bindex t)
+                                      (PB_PrimitiveType_toWireType pty)
+                                      (inl (inl v))) :: ir)
+                     (PB_Message_update msg t (eq_rect_r _ v pf))
+| PB_IR_repeated_cons desc :
+    forall ir (msg : PB_Message_denote desc),
+      PB_IR_refine ir msg ->
+      forall (t : BoundedTag desc) (pty : PB_PrimitiveType)
+        (pf : PB_Message_tagToType t = PB_Repeated (PB_Primitive pty))
+        (v : PB_Type_denote (PB_Singular (PB_Primitive pty))),
+        PB_IR_refine ((Build_PB_IRElm (bindex t)
+                                      (PB_PrimitiveType_toWireType pty)
+                                      (inl (inl v))) :: ir)
+                     (PB_Message_update msg t
+                                        (eq_rect_r
+                                           _
+                                           ((eq_rect _ _ (PB_Message_lookup msg t) _ pf) ++ [v])
+                                           pf))
+| PB_IR_repeated_app desc :
+    forall ir (msg : PB_Message_denote desc),
+      PB_IR_refine ir msg ->
+      forall (t : BoundedTag desc) (pty : PB_PrimitiveType)
+        (pf : PB_Message_tagToType t = PB_Repeated (PB_Primitive pty))
+        (v : PB_Type_denote (PB_Repeated (PB_Primitive pty))),
+        PB_PrimitiveType_toWireType pty <> PB_LengthDelimited ->
+        PB_IR_refine ((Build_PB_IRElm (bindex t)
+                                      (PB_PrimitiveType_toWireType pty)
+                                      (inl (inr v))) :: ir)
+                     (PB_Message_update msg t
+                                        (eq_rect_r
+                                           _
+                                           ((eq_rect _ _ (PB_Message_lookup msg t) _ pf) ++ v)
+                                           pf))
+| PB_IR_unknown desc :
+    forall ir (msg : PB_Message_denote desc),
+      PB_IR_refine ir msg ->
+      forall (t : UnboundedTag desc) (wty : PB_WireType)
+        (v : PB_WireType_denote wty),
+        PB_IR_refine ((Build_PB_IRElm (uindex t)
+                                      wty
+                                      (inl (inl v))) :: ir)
+                     msg
+| PB_IR_embedded_none desc :
+    forall ir (msg : PB_Message_denote desc),
+      PB_IR_refine ir msg ->
+      forall (t : BoundedTag desc) (desc' : PB_Message)
+        (pf : PB_Message_tagToType t = PB_Singular (PB_Embedded desc'))
+        v (msg' : PB_Message_denote desc'),
+        eq_rect _ _ (PB_Message_lookup msg t) _ pf = None ->
+        PB_IR_refine v msg' ->
+        PB_IR_refine ((Build_PB_IRElm (bindex t)
+                                      PB_LengthDelimited
+                                      (inr v)) :: ir)
+                     (PB_Message_update msg t
+                                        (eq_rect_r _ (Some msg') pf))
+| PB_IR_embedded_some desc :
+    forall ir (msg : PB_Message_denote desc),
+      PB_IR_refine ir msg ->
+      forall (t : BoundedTag desc) (desc' : PB_Message)
+        (pf : PB_Message_tagToType t = PB_Singular (PB_Embedded desc'))
+        v ir' (msg' msg'' : PB_Message_denote desc'),
+        eq_rect _ _ (PB_Message_lookup msg t) _ pf = Some msg'' ->
+        PB_IR_refine ir' msg'' ->
+        PB_IR_refine (v ++ ir') msg' ->
+        PB_IR_refine ((Build_PB_IRElm (bindex t)
+                                      PB_LengthDelimited
+                                      (inr v)) :: ir)
+                     (PB_Message_update msg t
+                                        (eq_rect_r _ (Some msg') pf))
+| PB_IR_repeated_embedded desc :
+    forall ir (msg : PB_Message_denote desc),
+      PB_IR_refine ir msg ->
+      forall (t : BoundedTag desc) (desc' : PB_Message)
+        (pf : PB_Message_tagToType t = PB_Repeated (PB_Embedded desc'))
+        v (msg' : PB_Message_denote desc'),
+        PB_IR_refine v msg' ->
+        PB_IR_refine ((Build_PB_IRElm (bindex t)
+                                      PB_LengthDelimited
+                                      (inr v)) :: ir)
+                     (PB_Message_update msg t
+                                        (eq_rect_r
+                                           _
+                                           ((eq_rect _ _ (PB_Message_lookup msg t) _ pf) ++ [msg'])
+                                           pf))
+.
 
-Definition PB_Message_IR_format {n} (desc : PB_Message n)
+Definition PB_Message_IR_format (desc : PB_Message)
   : FormatM (PB_Message_denote desc) PB_IR :=
   fun msg _ => {b | PB_IR_refine (fst b) msg}.
 
