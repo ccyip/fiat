@@ -486,7 +486,14 @@ Proof.
   exact (PB_Type_default ty).
 Defined.
 
-Definition PB_Message_default (desc : PB_Message) := PB_Message_default' (PB_MessageDesc desc).
+Definition PB_Message_default (desc : PB_Message) : PB_Message_denote desc :=
+  match desc with
+  | Build_PB_Message _ desc => PB_Message_default' desc
+  end.
+
+Definition PB_Message_default2 (desc : PB_Message) := PB_Message_default' (PB_MessageDesc desc).
+
+(* :TODO: show equivalence of two default functions. *)
 
 Definition PB_FieldTag_OK (t : N) :=
   ((1 <= t <= 18999) \/ (20000 <= t <= 536870911))%N.
@@ -529,7 +536,7 @@ Lemma PB_Message_default_correct (desc : PB_Message)
   : forall (i : Fin.t (PB_MessageLen desc)),
     type_cast (PB_denote_type_eq desc i)
               (PB_Type_default (PB_FieldType (Vector.nth (PB_MessageDesc desc) i)))
-    = ith2 (PB_Message_default desc) i.
+    = ith2 (PB_Message_default2 desc) i.
 Proof.
   destruct desc as [n desc]. simpl in *.
   induction desc; intros.
