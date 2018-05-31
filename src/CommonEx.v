@@ -8,8 +8,11 @@ Require Import
         Fiat.Common
         Fiat.Computation
         Fiat.Computation.Core
+        Fiat.Computation.FixComp
         Fiat.Narcissus.Common.Specs
         Fiat.Narcissus.Common.ComposeOpt.
+
+Import FixComp.LeastFixedPointFun.
 
 Ltac solve_by_extensionality :=
   repeat let a := fresh in
@@ -197,5 +200,51 @@ Proof.
   } {
     destruct decode_correct as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
     split; auto. eexists _, _. repeat split; eauto.
+  }
+Qed.
+
+Lemma fix_format_correct
+      {A B} {cache : Cache} {monoid : Monoid B}
+      {P : CacheDecode -> Prop}
+      {P_inv : (CacheDecode -> Prop) -> Prop}
+      (predicate : A -> Prop) (predicate_rest : A -> B -> Prop)
+      (format_body : funType [A; CacheFormat] (B * CacheFormat) ->
+                     funType [A; CacheFormat] (B * CacheFormat))
+      (decode_body : forall b : B,
+          (forall b' : B, lt_B b' b -> CacheDecode -> option (A * B * CacheDecode)) ->
+          CacheDecode -> option (A * B * CacheDecode))
+      (format_body_OK : Frame.monotonic_function format_body)
+      (P_inv_OK : cache_inv_Property P P_inv)
+      (decode_body_correct :
+         cache_inv_Property P P_inv ->
+         forall (format : funType [A; CacheFormat] (B * CacheFormat)) decode,
+           refineEquivFun format (format_body format) ->
+           (forall b cd, decode b cd = decode_body b (fun b' _ => decode b') cd) ->
+           CorrectDecoder monoid predicate predicate_rest
+                          (format_body format)
+                          (fun b => decode_body b (fun b' _ => decode b'))
+                          P)
+  : CorrectDecoder
+      monoid predicate predicate_rest
+      (LeastFixedPoint format_body) (Fix well_founded_lt_b _ decode_body) P.
+Proof.
+  specialize (decode_body_correct P_inv_OK).
+  split; intros. {
+    rewrite Init.Wf.Fix_eq by solve_extensionality.
+    eapply decode_body_correct; eauto.
+    split.
+    eapply (unroll_LeastFixedPoint format_body_OK); eauto.
+    eapply (unroll_LeastFixedPoint' format_body_OK); eauto.
+    intros; rewrite Init.Wf.Fix_eq by solve_extensionality; eauto.
+    eapply (unroll_LeastFixedPoint format_body_OK); eauto.
+  } {
+    rewrite Init.Wf.Fix_eq in H1 by solve_extensionality.
+    eapply decode_body_correct in H1; eauto.
+    intuition; destruct_ex; eexists _, _; intuition eauto.
+    eapply (unroll_LeastFixedPoint' format_body_OK); eauto.
+    split.
+    eapply (unroll_LeastFixedPoint format_body_OK); eauto.
+    eapply (unroll_LeastFixedPoint' format_body_OK); eauto.
+    intros; rewrite Init.Wf.Fix_eq by solve_extensionality; eauto.
   }
 Qed.
