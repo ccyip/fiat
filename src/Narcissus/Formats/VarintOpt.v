@@ -110,16 +110,17 @@ Section Varint.
 
   Definition Varint_body
              (format : funType [N : Type; CacheFormat] (B * CacheFormat))
-             n ce :=
-    let (q, r) := N.div_eucl n (2^7) in
-    match q with
-    | N0 => format_word (NToWord 8 r) ce
-    | Npos _ =>
-      let r' := r + (2^7) in
-      `(b1, ce1) <- format_word (NToWord 8 r') ce;
-        `(b2, ce2) <- format q ce1;
-        ret (mappend b1 b2, ce2)
-    end.
+    : funType [N : Type; CacheFormat] (B * CacheFormat) :=
+    fun n ce =>
+      let (q, r) := N.div_eucl n (2^7) in
+      match q with
+      | N0 => format_word (NToWord 8 r) ce
+      | Npos _ =>
+        let r' := r + (2^7) in
+        `(b1, ce1) <- format_word (NToWord 8 r') ce;
+          `(b2, ce2) <- format q ce1;
+          ret (mappend b1 b2, ce2)
+      end.
   Arguments Varint_body /.
 
   Definition Varint_format : FormatM N B :=
@@ -166,6 +167,8 @@ Section Varint.
                      Varint_format Varint_decode P.
   Proof.
     unfold Varint_format, Varint_decode, Varint_body.
+    eapply fix_format_correct; eauto.
+    apply Varint_body_monotone. intros _ ? ? A1 A2.
     destruct (Word_decode_correct (sz := 8) (P := P)) as [He Hd]; eauto.
     split; intros. {
       clear H0 H1 Hd.
@@ -175,13 +178,11 @@ Section Varint.
       generalize dependent env'.
       generalize dependent xenv.
       induction data using (well_founded_ind N.lt_wf_0); intros.
-      apply (unroll_LeastFixedPoint Varint_body_monotone) in H2.
       unfold Varint_body in *.
       destruct N.div_eucl as [q r] eqn:Hdiv.
       destruct q. {
         edestruct He as [? [? [? ?]]]; eauto.
         eexists. repeat split; eauto.
-        rewrite Coq.Init.Wf.Fix_eq by solve_extensionality.
         edestruct @Decode_w_Measure_lt_eq
           with (A_decode := (decode_word (sz := 8))); eauto.
         rewrite H5. simpl.
@@ -194,11 +195,11 @@ Section Varint.
       } {
         computes_to_inv2.
         edestruct He as [? [? [? ?]]]; eauto.
-        edestruct H as [? [? [? ?]]]; try apply H2'; eauto.
+        edestruct H as [? [? [? ?]]]; eauto.
         eapply div_eucl_div_lt; eauto; try easy.
         destruct data. inversion Hdiv. easy.
+        apply A1. eauto.
         eexists. repeat split; eauto.
-        rewrite Coq.Init.Wf.Fix_eq by solve_extensionality.
         edestruct @Decode_w_Measure_lt_eq
           with (A_decode := (decode_word (sz := 8))); eauto.
         rewrite <- mappend_assoc.
@@ -207,7 +208,7 @@ Section Varint.
           by (eapply div_eucl_mod_lt_sz_add with (sz := 7%nat); eauto).
         rewrite (proj2 (N.ltb_ge _ _))
           by (rewrite N.add_comm; apply N.le_add_r).
-        rewrite H5.
+        rewrite A2. rewrite H5.
         unfold DecodeBindOpt2, BindOpt, If_Opt_Then_Else.
         repeat progress f_equal.
         pose proof (N.div_eucl_spec data (2^7)).
@@ -222,14 +223,12 @@ Section Varint.
       generalize dependent data.
       generalize dependent ext.
       induction bin using (well_founded_ind well_founded_lt_b); intros.
-      rewrite Coq.Init.Wf.Fix_eq in H1 by solve_extensionality.
       decode_opt_to_inv. destruct x1.
       apply Decode_w_Measure_lt_eq_inv in H1. simpl in H1.
       edestruct Hd as [? [? [? [? [? [? ?]]]]]]; eauto.
       destruct N.ltb eqn:Hlt. {
         inversion H3. clear H3. subst. split; eauto.
         eexists _, _. repeat split; eauto.
-        apply (unroll_LeastFixedPoint' Varint_body_monotone).
         simpl. destruct N.div_eucl as [q r] eqn:Hdiv.
         assert (q = 0) as L1. {
           apply div_eucl_div in Hdiv. subst.
@@ -248,9 +247,10 @@ Section Varint.
         destruct x5. easy.
         inversion H9. clear H9. subst.
         edestruct H as [? [? [? [? [? [? ?]]]]]]; eauto.
+        rewrite <- A2; eauto.
         subst. split; eauto.
         eexists _, _. repeat split; eauto.
-        apply (unroll_LeastFixedPoint' Varint_body_monotone).
+        apply A1 in H9.
         simpl. destruct N.div_eucl as [q r] eqn:Hdiv.
         assert (wordToN x0 - (2^7) < (2^7)) as L0. {
           apply N.add_lt_mono_r with (p := 2^7).
