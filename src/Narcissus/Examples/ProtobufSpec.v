@@ -845,6 +845,18 @@ Proof.
   rewrite (PB_Message_tagToIndex_correct' desc tag H fld); eauto.
 Qed.
 
+Theorem PB_Message_OK_sub_tagToType (desc : PB_Message)
+  : PB_Message_OK desc ->
+    forall (tag : BoundedTag desc) desc',
+      (PB_Message_tagToType tag = PB_Singular (PB_Embedded desc') \/
+       PB_Message_tagToType tag = PB_Repeated (PB_Embedded desc')) ->
+      PB_Message_OK desc'.
+Proof.
+  intros. eapply PB_Message_OK_sub in H; eauto.
+  destruct desc as [n desc]. destruct tag as [? [? ?]]. simpl.
+  apply vector_in.
+Qed.
+
 Definition PB_Message_tagToDenoteType {desc : PB_Message}
            (tag : BoundedTag desc) :=
   Domain (PB_Message_heading desc) (PB_Message_tagToIndex tag).
@@ -1599,30 +1611,122 @@ Inductive PB_IR_refine
                                            pf))
 .
 
+Ltac PB_IR_refine_inv_step :=
+  match goal with
+  | H : bindex ?a = bindex _ |- _ => apply BoundedTag_inj in H; [subst a | solve [eauto]]
+  | H : uindex _ = bindex _ |- _ => symmetry in H
+  | H : bindex _ = uindex _ |- _ => apply BoundedTag_not_unbounded in H; inversion H
+  | H : PB_Message_tagToType ?t = ?c1 (?c2 ?a),
+        H' : PB_Message_tagToType ?t = ?c1 (?c2 ?b) |- _ => progress replace b with a in * by congruence
+  | H : existT _ _ _ = existT _ _ _ |- _  =>
+    apply inj_pair2_eq_dec in H;
+    [| clear H; try apply PB_Message_eq_dec || apply PB_WireType_eq_dec];
+    subst
+  | H : ?a = Some _, H' : ?b = None |- _ => progress replace a with b in *; [congruence | clear H H']
+  | H : ?a = Some _, H' : ?b = Some _ |- _ => progress replace a with b in *; [substss; injections | clear H H']
+  | |- ?a = ?b => progress f_equal; eauto; try apply (UIP_dec PB_Type_eq_dec)
+  | _ => eauto using eq_sym, PB_Message_OK_sub_tagToType; easy || congruence
+  end.
 
-Definition PB_Message_IR_decode {n} (desc : PB_Message n)
-  : DecodeM (PB_Message_denote desc) PB_IR.
+Ltac PB_IR_refine_inv hyp :=
+  inversion hyp; repeat PB_IR_refine_inv_step.
+
+Theorem PB_IR_refine_deterministic
+  : forall desc,
+    PB_Message_OK desc ->
+    forall (msg' msg1 msg2 : PB_Message_denote desc) ir,
+      PB_IR_refine msg' ir msg1 ->
+      PB_IR_refine msg' ir msg2 ->
+      msg1 = msg2.
 Proof.
-  refine
-    (fix decode ir cd :=
-       match ir with
-       | nil => Some (PB_Message_default desc, nil, cd)
-       | {| PB_IRTag := t;
-            PB_IRType := ty;
-            PB_IRVal := v |} :: ir' =>
-         `(msg, ir2, cd') <- decode ir' cd;
-         match PB_Message_boundedTag desc t with
-         | inleft tag =>
-           if PB_Type_eq_dec ty (PB_Message_tagToType tag) then
-             Some (PB_Message_update msg tag _ (* v *),
-                   ir2, cd')
-           else None
-         | _ => None
-         end
-       end).
-  rewrite <- e.
-  exact v.
-Defined.
+  intros. induction H0; PB_IR_refine_inv H1.
+Qed.
+
+Ltac PB_IR_refine_inv_step_ext :=
+  match goal with
+  | |- PB_IR_refine ?a nil ?b => replace a with b; [constructor |]
+  | _ => eauto using eq_sym, PB_Message_OK_sub_tagToType, PB_IR_refine_deterministic
+  end.
+
+Ltac PB_IR_refine_inv hyp ::=
+  inversion hyp; repeat first [PB_IR_refine_inv_step | PB_IR_refine_inv_step_ext].
+
+Theorem PB_IR_refine_trans
+  : forall desc,
+    PB_Message_OK desc ->
+    forall (msg1 msg2 msg3 : PB_Message_denote desc) (ir1 ir2 ir3 : PB_IR),
+    PB_IR_refine msg1 ir1 msg2 ->
+    (PB_IR_refine msg2 ir2 msg3 <-> PB_IR_refine msg1 (ir2 ++ ir1) msg3).
+Proof.
+  split; intros. {
+    induction H1; simpl; eauto; try solve [constructor; eauto].
+    eapply PB_IR_embedded_some; eauto.
+  } {
+    remember (ir2 ++ ir1).
+    generalize dependent msg2.
+    generalize dependent ir1.
+    generalize dependent ir2.
+    induction H1; simpl; intros.
+    all : destruct ir2; simpl in Heql; injections; subst;
+      [match goal with
+       | H : PB_IR_refine _ _ ?a |- PB_IR_refine ?a _ _ => solve [PB_IR_refine_inv H]
+       end |
+       match goal with
+       | H : _ = Some _ |- _ => eapply PB_IR_embedded_some; eauto
+       | _ => try easy; constructor; eauto
+       end].
+  }
+Qed.
+
+(* Theorem PB_IR_refine_eq' *)
+(*   : forall desc, *)
+(*     PB_Message_OK desc -> *)
+(*     forall ir ir' (msg msg' : PB_Message_denote desc), *)
+(*       PB_IR_refine_ref ir' msg' -> *)
+(*       PB_IR_refine msg' ir msg -> *)
+(*       PB_IR_refine_ref (ir ++ ir') msg. *)
+(* Proof. *)
+(*   intros. *)
+(*   generalize dependent ir'. *)
+(*   induction H1; intros; simpl. *)
+(*   - auto. *)
+(*   - constructor; eauto. *)
+(*   - constructor; eauto. *)
+(*   - constructor; eauto. *)
+(*   - constructor; eauto. *)
+(*   - constructor; eauto using PB_Message_OK_sub_tagToType. *)
+(*     replace v with (v++nil) by apply app_nil_r. *)
+(*     eapply IHPB_IR_refine2; eauto using PB_Message_OK_sub_tagToType. *)
+(*     constructor. *)
+(*   - admit. *)
+(*     (* eapply PB_IR_embedded_some_ref; eauto using PB_Message_OK_sub_tagToType. *) *)
+(*   - constructor; eauto using PB_Message_OK_sub_tagToType. *)
+(*     replace v with (v++nil) by apply app_nil_r. *)
+(*     eapply IHPB_IR_refine2; eauto using PB_Message_OK_sub_tagToType. *)
+(*     constructor. *)
+(* Qed. *)
+
+(* Theorem PB_IR_refine_eq *)
+(*   : forall desc, *)
+(*     PB_Message_OK desc -> *)
+(*     forall ir (msg : PB_Message_denote desc), *)
+(*       PB_IR_refine_ref ir msg <-> PB_IR_refine (PB_Message_default desc) ir msg. *)
+(* Proof. *)
+(*   intros. split. { *)
+(*     induction 1; *)
+(*       match goal with *)
+(*       | H : _ = Some _ |- _ => eapply PB_IR_embedded_some; eauto *)
+(*       | _ => constructor *)
+(*       end; eauto using PB_Message_OK_sub_tagToType. *)
+(*     eapply PB_IR_refine_trans; eauto using PB_Message_OK_sub_tagToType. *)
+(*   } { *)
+(*     intros. *)
+(*     replace ir with (ir ++ nil) by apply app_nil_r. *)
+(*     eapply PB_IR_refine_eq'; eauto. *)
+(*     constructor. *)
+(*   } *)
+(* Qed. *)
+
 
 Local Transparent computes_to.
 Local Transparent Pick.
