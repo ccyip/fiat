@@ -98,6 +98,36 @@ Proof.
   exact v.
 Defined.
 
+Definition CorrectDecoderWf
+           {A B} {cache : Cache}
+           {F : B -> Type}
+           (monoid : Monoid B)
+           (predicate : A -> Prop)
+           (rest_predicate : A -> B -> Prop)
+           (format : FormatM A B)
+           (decode : forall b, F b -> CacheDecode -> option (A * B * CacheDecode))
+           (decode_inv : CacheDecode -> Prop) :=
+  (forall env env' xenv data bin ext
+     (env_OK : decode_inv env'),
+      Equiv env env' ->
+      predicate data ->
+      rest_predicate data ext ->
+      format data env ↝ (bin, xenv) ->
+      forall pf,
+      exists xenv',
+        decode (mappend bin ext) pf env' = Some (data, ext, xenv')
+        /\ Equiv xenv xenv' /\ decode_inv xenv') /\
+  (forall env env' xenv' data bin ext pf,
+      Equiv env env'
+      -> decode_inv env'
+      -> decode bin pf env' = Some (data, ext, xenv')
+      -> decode_inv xenv'
+        /\ exists bin' xenv,
+          (format data env ↝ (bin', xenv))
+          /\ bin = mappend bin' ext
+          /\ predicate data
+          /\ Equiv xenv xenv').
+
 Import Ensembles.
 
 Lemma fun_compose_format_correct
