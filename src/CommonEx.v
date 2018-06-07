@@ -69,6 +69,23 @@ Ltac gen_eq_rect :=
   | _ : _ |- context [eq_rect _ _ _ _ ?e] => generalize e; try destruct 0
   end.
 
+Ltac choose_br n :=
+  match n with
+  | O => try left
+  | S ?n' => right; choose_br n'
+  end.
+
+Ltac destruct_many :=
+  repeat first [match goal with
+                | H : ?a \/ ?b |- _ => destruct H
+                end |
+                match goal with
+                | [ H : ex _ |- _ ] => destruct H
+                end |
+                match goal with
+                | H : ?a /\ ?b |- _ => destruct H
+                end].
+
 Definition type_cast {A B : Type} (pf : A = B) (v : A) : B.
 Proof.
   rewrite <- pf.
