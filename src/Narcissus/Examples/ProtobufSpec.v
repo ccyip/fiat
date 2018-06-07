@@ -540,9 +540,17 @@ Definition PB_Message_default (desc : PB_Message) : PB_Message_denote desc :=
   | Build_PB_Message _ desc => PB_Message_default' desc
   end.
 
+(* :TODO: show equivalence of two default functions. *)
 Definition PB_Message_default2 (desc : PB_Message) := PB_Message_default' (PB_MessageDesc desc).
 
-(* :TODO: show equivalence of two default functions. *)
+Lemma PB_Message_tags_correct (desc : PB_Message)
+  : forall i, Vector.nth (PB_Message_tags desc) i
+         = PB_FieldTag (Vector.nth (PB_MessageDesc desc) i).
+Proof.
+  destruct desc as [n desc]. simpl in *.
+  unfold PB_Message_tags. simpl.
+  intros. apply Vector.nth_map. reflexivity.
+Qed.
 
 Definition PB_FieldTag_OK (t : N) :=
   ((1 <= t <= 18999) \/ (20000 <= t <= 536870911))%N.
@@ -554,18 +562,63 @@ Definition PB_Field_OK (fld : PB_Field) :=
   PB_FieldName_OK (PB_FieldName fld) /\
   PB_FieldTag_OK (PB_FieldTag fld).
 
-(* :TODO: abstract out this proof as ltac. *)
-Lemma PB_Message_tags_correct (desc : PB_Message)
-  : forall i, Vector.nth (PB_Message_tags desc) i
-         = PB_FieldTag (Vector.nth (PB_MessageDesc desc) i).
+Definition PB_Message_tags_nodup (desc : PB_Message) :=
+  forall i1 i2 : Fin.t (PB_MessageLen desc),
+    Vector.nth (PB_Message_tags desc) i1 = Vector.nth (PB_Message_tags desc) i2 ->
+    i1 = i2.
+
+Lemma vec_nodup_cons {A n} (h : A) (v : Vector.t A n)
+  : (forall i1 i2 : Fin.t (S n), Vector.nth (Vector.cons _ h _ v) i1 = Vector.nth (Vector.cons _ h _ v) i2 -> i1 = i2) ->
+    (forall i1 i2 : Fin.t n, Vector.nth v i1 = Vector.nth v i2 -> i1 = i2).
 Proof.
-  destruct desc as [n desc]. simpl in *.
-  induction desc; intros.
-  - inversion i.
-  - revert desc IHdesc. pattern n, i.
-    apply Fin.caseS; intros.
-    + reflexivity.
-    + apply IHdesc.
+  intros.
+  destruct (Fin.eq_dec i1 i2); auto.
+  exfalso.
+  specialize (H (Fin.FS i1) (Fin.FS i2)).
+  simpl in H. apply H in H0. inversion H0. existT_eq_dec. easy.
+Qed.
+
+Definition PB_Message_names_nodup (desc : PB_Message) :=
+  forall i1 i2 : Fin.t (PB_MessageLen desc),
+    Vector.nth (Vector.map PB_FieldName (PB_MessageDesc desc)) i1 = Vector.nth (Vector.map PB_FieldName (PB_MessageDesc desc)) i2 ->
+    i1 = i2.
+
+Fixpoint PB_Message_OK (desc : PB_Message) : Prop :=
+  Vector.Forall PB_Field_OK (PB_MessageDesc desc) /\
+  PB_Message_tags_nodup desc /\ PB_Message_names_nodup desc /\
+  match desc with
+  | Build_PB_Message n desc =>
+    (fix OK {n} (desc : PB_Desc n) :=
+       match desc with
+       | Vector.nil => True
+       | Vector.cons h _ t =>
+         match h with
+         | Build_PB_Field ty _ _ =>
+           match ty with
+           | PB_Singular (PB_Embedded desc'')
+           | PB_Repeated (PB_Embedded desc'') =>
+             PB_Message_OK desc''
+           | _ => True
+           end
+         end /\ OK t
+       end) n desc
+  end.
+
+Theorem PB_Message_OK_sub (desc : PB_Message)
+  : PB_Message_OK desc ->
+    forall fld, Vector.In fld (PB_MessageDesc desc) ->
+           forall desc', (PB_FieldType fld = PB_Singular (PB_Embedded desc') \/
+                     PB_FieldType fld = PB_Repeated (PB_Embedded desc')) ->
+                    PB_Message_OK desc'.
+Proof.
+  destruct desc as [n desc]. simpl.
+  intros. induction H0.
+  - destruct fld; destruct p; destruct p; intuition; try easy; injections; auto.
+  - apply IHIn. destruct H as [? [? [? [? ?]]]].
+    repeat split; auto.
+    + inversion H. existT_eq_dec. congruence.
+    + unfold PB_Message_tags_nodup in *. eapply vec_nodup_cons. simpl in *. eauto.
+    + unfold PB_Message_names_nodup in *. eapply vec_nodup_cons. simpl in *. eauto.
 Qed.
 
 Lemma PB_denote_type_eq (desc : PB_Message) (i : Fin.t (PB_MessageLen desc))
@@ -595,20 +648,6 @@ Proof.
     + reflexivity.
     + apply IHdesc.
 Qed.
-
-Definition PB_Message_tags_nodup (desc : PB_Message) :=
-  forall i1 i2 : Fin.t (PB_MessageLen desc),
-    Vector.nth (PB_Message_tags desc) i1 = Vector.nth (PB_Message_tags desc) i2 ->
-    i1 = i2.
-
-Definition PB_Message_names_nodup (desc : PB_Message) :=
-  forall i1 i2 : Fin.t (PB_MessageLen desc),
-    PB_FieldName (Vector.nth (PB_MessageDesc desc) i1) = PB_FieldName (Vector.nth (PB_MessageDesc desc) i2) ->
-    i1 = i2.
-
-Definition PB_Message_OK (desc : PB_Message) :=
-  Vector.Forall PB_Field_OK (PB_MessageDesc desc) /\
-  PB_Message_tags_nodup desc /\ PB_Message_names_nodup desc.
 
 Definition BoundedTag (desc : PB_Message) :=
   BoundedIndex (PB_Message_tags desc).
