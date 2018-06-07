@@ -339,6 +339,7 @@ src/Narcissus/Examples/ICMP_Packet.v
 src/Narcissus/Examples/IntExample.v
 src/Narcissus/Examples/Toy.v
 src/Narcissus/Examples/Toy2.v
+src/Narcissus/Examples/ProtobufLengthDelimited.v
 src/Narcissus/Examples/ProtobufSpec.v
 src/Narcissus/Examples/AlignedProtobuf.v
 src/Narcissus/Examples/ProtobufExtract.v
