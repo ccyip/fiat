@@ -61,8 +61,7 @@ Ltac fill_ind_h f :=
 Ltac existT_eq_dec :=
     match goal with
     | [ H : existT _ _ _ = existT _ _ _ |- _ ] =>
-      apply inj_pair2_eq_dec in H;
-      try apply Nat.eq_dec
+      apply inj_pair2_eq_dec in H; [| clear H; try apply Nat.eq_dec]
     end.
 
 Ltac gen_eq_rect :=
