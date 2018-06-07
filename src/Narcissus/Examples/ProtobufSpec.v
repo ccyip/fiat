@@ -1856,14 +1856,6 @@ Definition PB_Message_IR_decode (desc : PB_Message)
   : DecodeM (PB_Message_denote desc) PB_IR :=
   PB_Message_IR_decode_strong desc (PB_Message_default desc).
 
-Ltac fix_PB_Message_tagToType :=
-  match goal with
-  | |- context [match PB_Message_tagToType ?t with _ => _ end
-                 (@PB_Message_update ?d ?a ?t) (@PB_Message_lookup ?d ?a ?t)] =>
-    try destruct d;
-    unfold PB_Message_update, PB_Message_lookup, PB_Message_update', PB_Message_lookup' in *;
-    generalize (PB_Message_tagToDenoteType_correct _ t)
-  end.
 
 Lemma PB_Message_IR_decode_nil (desc : PB_Message)
       (init msg : PB_Message_denote desc) (ir ir' : PB_IR)
@@ -1877,12 +1869,12 @@ Proof.
   destruct ir. injections. easy.
   destruct p. destruct PB_Message_boundedTag eqn:?. {
     decode_opt_to_inv.
-    revert H0. fix_PB_Message_tagToType.
+    revert H0. generalize (PB_Message_update x b) as update, (PB_Message_lookup x b) as lookup.
     destruct PB_Message_tagToType eqn:?; destruct p; intros;
       destruct PB_WireType_eq_dec; repeat destruct s; injections; try easy.
-    destruct type_cast_r; decode_opt_to_inv; easy.
+    destruct lookup; decode_opt_to_inv; easy.
     destruct PB_WireType_eq_dec; injections; try easy.
-    destruct type_cast_r; decode_opt_to_inv; easy.
+    destruct lookup; decode_opt_to_inv; easy.
   } {
     repeat destruct s; try easy.
     eapply IH; eauto. apply PB_IR_measure_cons_lt.
@@ -1917,7 +1909,32 @@ Proof.
         apply PB_Message_boundedTag_correct in Heq.
         apply BoundedTag_inj in Heq; eauto. subst.
         rewrite H1. simpl. clear H1.
-        fix_PB_Message_tagToType. rewrite pf. intros.
+
+        generalize (PB_Message_update msg t) as update.
+        generalize (PB_Message_lookup msg t) as lookup.
+        rewrite pf. intros.
+        destruct PB_WireType_eq_dec; try easy.
+        simpl. repeat f_equal. unfold eq_rect_r. simpl.
+        rewrite <- eq_rect_eq_dec. eauto. apply PB_WireType_eq_dec.
+
+        (* fix_PB_Message_tagToType. rewrite pf. intros. *)
+        (* destruct PB_WireType_eq_dec; try easy. *)
+        (* simpl. repeat f_equal. unfold eq_rect_r. simpl. *)
+        (* rewrite <- eq_rect_eq_dec. eauto. apply PB_WireType_eq_dec. *)
+      } {
+        exfalso. clear H1. eapply PB_Message_boundedTag_notr; eauto.
+      }
+    } {
+      edestruct IHPB_IR_refine as [? [? [? ?]]]; eauto.
+      eexists. repeat split; intros; eauto.
+      destruct PB_Message_boundedTag eqn:Heq. {
+        apply PB_Message_boundedTag_correct in Heq.
+        apply BoundedTag_inj in Heq; eauto. subst.
+        rewrite H1. simpl. clear H1.
+
+        generalize (PB_Message_update msg t) as update.
+        generalize (PB_Message_lookup msg t) as lookup.
+        rewrite pf. intros.
         destruct PB_WireType_eq_dec; try easy.
         simpl. repeat f_equal. unfold eq_rect_r. simpl.
         rewrite <- eq_rect_eq_dec. eauto. apply PB_WireType_eq_dec.
@@ -1930,24 +1947,12 @@ Proof.
       destruct PB_Message_boundedTag eqn:Heq. {
         apply PB_Message_boundedTag_correct in Heq.
         apply BoundedTag_inj in Heq; eauto. subst.
-        rewrite H1. simpl. clear H1.
-        fix_PB_Message_tagToType. rewrite pf. intros.
-        destruct PB_WireType_eq_dec; try easy.
-        simpl. repeat f_equal. unfold type_cast_r. unfold eq_rect_r. simpl.
-        repeat f_equal. rewrite <- eq_rect_eq_dec. eauto. apply PB_WireType_eq_dec.
-      } {
-        exfalso. clear H1. eapply PB_Message_boundedTag_notr; eauto.
-      }
-    } {
-      edestruct IHPB_IR_refine as [? [? [? ?]]]; eauto.
-      eexists. repeat split; intros; eauto.
-      destruct PB_Message_boundedTag eqn:Heq. {
-        apply PB_Message_boundedTag_correct in Heq.
-        apply BoundedTag_inj in Heq; eauto. subst.
         rewrite H3. simpl. clear H3.
-        fix_PB_Message_tagToType. rewrite pf. intros.
+
+        generalize (PB_Message_update msg t) as update.
+        generalize (PB_Message_lookup msg t) as lookup.
+        rewrite pf. intros.
         destruct PB_WireType_eq_dec; try easy.
-        simpl. repeat f_equal. unfold type_cast_r. unfold eq_rect_r. simpl.
         repeat f_equal. rewrite <- eq_rect_eq_dec. destruct PB_WireType_eq_dec; auto. congruence.
         apply PB_WireType_eq_dec.
       } {
@@ -1969,21 +1974,17 @@ Proof.
         apply PB_Message_boundedTag_correct in Heq.
         apply BoundedTag_inj in Heq; eauto. subst.
         rewrite H2. simpl. clear H2.
-        fix_PB_Message_tagToType. rewrite pf. intros.
+
+        revert H.
+        generalize (PB_Message_update msg t) as update.
+        generalize (PB_Message_lookup msg t) as lookup.
+        rewrite pf. intros.
         match goal with
         | H : ?a = None |-
           context [match ?b with _ => _ end] => replace b with a; [rewrite H |]
         end.
         rewrite app_nil_r in H5. rewrite H5. clear H5. simpl. auto.
-        unfold type_cast_r. unfold eq_rect_r. simpl.
-        repeat match goal with
-               | H : _ |- _ => clear H
-               end.
-        simpl in *. repeat gen_eq_rect. rewrite pf. simpl. clear pf e.
-        intros. rewrite <- eq_rect_eq_dec by apply PB_Type_eq_dec.
-        f_equal.
-        (* :Q: *)
-        apply UIP.
+        simpl. reflexivity.
       } {
         exfalso. clear H1. eapply PB_Message_boundedTag_notr; eauto.
       }
@@ -1995,21 +1996,17 @@ Proof.
         apply PB_Message_boundedTag_correct in Heq.
         apply BoundedTag_inj in Heq; eauto. subst.
         rewrite H2. simpl. clear H2.
-        fix_PB_Message_tagToType. rewrite pf. intros.
+
+        revert H.
+        generalize (PB_Message_update msg t) as update.
+        generalize (PB_Message_lookup msg t) as lookup.
+        rewrite pf. intros.
         match goal with
         | H : ?a = Some _ |-
           context [match ?b with _ => _ end] => replace b with a; [rewrite H |]
         end.
         rewrite app_nil_r in H5. rewrite H5. clear H5. simpl. auto.
-        unfold type_cast_r. unfold eq_rect_r. simpl.
-        repeat match goal with
-               | H : _ |- _ => clear H
-               end.
-        simpl in *. repeat gen_eq_rect. rewrite pf. simpl. clear pf e.
-        intros. rewrite <- eq_rect_eq_dec by apply PB_Type_eq_dec.
-        f_equal.
-        (* :Q: *)
-        apply UIP.
+        simpl. reflexivity.
       } {
         exfalso. clear H1. eapply PB_Message_boundedTag_notr; eauto.
       }
@@ -2021,7 +2018,10 @@ Proof.
         apply PB_Message_boundedTag_correct in Heq.
         apply BoundedTag_inj in Heq; eauto. subst.
         rewrite H1. simpl. clear H1.
-        fix_PB_Message_tagToType. rewrite pf. intros.
+
+        generalize (PB_Message_update msg t) as update.
+        generalize (PB_Message_lookup msg t) as lookup.
+        rewrite pf. intros.
         rewrite app_nil_r in H4. rewrite H4. clear H4. simpl. auto.
       } {
         exfalso. clear H1. eapply PB_Message_boundedTag_notr; eauto.
@@ -2044,41 +2044,34 @@ Proof.
       destruct p.
       destruct PB_Message_boundedTag eqn:Heq. {
         decode_opt_to_inv.
-        pose proof H1 as Hnil.
-        apply PB_Message_IR_decode_nil in Hnil. subst.
-        pose proof (PB_IR_singular desc) as Hc1.
-        pose proof (PB_IR_repeated_cons desc) as Hc2.
-        pose proof (PB_IR_repeated_app desc) as Hc3.
-        pose proof (PB_IR_embedded_none desc) as Hc4.
-        pose proof (PB_IR_embedded_some desc) as Hc5.
-        pose proof (PB_IR_repeated_embedded desc) as Hc6.
-        revert H2. fix_PB_Message_tagToType.
+        pose proof H1 as Hnil. apply PB_Message_IR_decode_nil in Hnil. subst.
+        specialize (PB_IR_singular desc) with (msg := x) (t := b) as E_singular.
+        specialize (PB_IR_repeated_cons desc) with (msg := x) (t := b) as E_repeated_cons.
+        specialize (PB_IR_repeated_app desc) with (msg := x) (t := b) as E_repeated_app.
+        specialize (PB_IR_embedded_none desc) with (msg := x) (t := b) as E_embedded_none.
+        specialize (PB_IR_embedded_some desc) with (msg := x) (t := b) as E_embedded_some.
+        specialize (PB_IR_repeated_embedded desc) with (msg := x) (t := b) as E_repeated_embedded.
+        unfold eq_rect_r in *.
+        repeat match goal with
+               | H : context [PB_Message_lookup x b] |- _ => revert H
+               | H : context [PB_Message_update x b] |- _ => revert H
+               end.
+        generalize (PB_Message_update x b) as update.
+        generalize (PB_Message_lookup x b) as lookup.
+        intros.
+
         destruct PB_Message_tagToType eqn:?; destruct p; intros. {
           apply PB_Message_boundedTag_correct in Heq. subst.
           destruct PB_WireType_eq_dec; repeat destruct s; injections; try easy.
           eapply IH in H1; eauto using PB_IR_measure_cons_lt. clear IH. intuition.
           destruct_many. simpl in *. rewrite app_nil_r in H3. subst.
           eexists _, _. repeat split; eauto.
-          2 : {
-            rewrite app_nil_r. reflexivity.
-          }
-          eapply Hc1 with (pf:=Heqp) in H1.
-          match goal with
-          | H : PB_IR_refine ?a ?b ?c
-            |- PB_IR_refine ?a' ?b' ?c' =>
-            replace a' with a by reflexivity;
-              replace b' with b by reflexivity;
-              replace c' with c
-          end; auto.
-          repeat match goal with
-                 | H : _ |- _ => clear H
-                 end.
-          f_equal. unfold type_cast. unfold eq_rect_r. simpl. repeat gen_eq_rect.
-          clear e. intros. destruct e0. simpl. f_equal. apply UIP.
+          2 : rewrite app_nil_r; reflexivity.
+          eapply E_singular with (pf:=eq_refl) in H1; simpl in *; eauto.
         } {
           apply PB_Message_boundedTag_correct in Heq. subst.
           destruct PB_WireType_eq_dec; repeat destruct s; injections; try easy.
-          destruct type_cast_r eqn:?. {
+          destruct lookup eqn:?. {
             decode_opt_to_inv. subst.
             pose proof H2 as Hnil. apply PB_Message_IR_decode_nil in Hnil. subst.
             eapply IH in H1; eauto using PB_IR_measure_cons_lt. destruct_many.
@@ -2086,28 +2079,8 @@ Proof.
             clear IH. intuition.
             simpl in *. rewrite app_nil_r in H4, H8. subst.
             eexists _, _. repeat split; eauto.
-            2 : {
-              rewrite app_nil_r. reflexivity.
-            }
-            eapply Hc5 with (pf:=Heqp) in H7; eauto. clear H3.
-            match goal with
-            | H : PB_IR_refine ?a ?b ?c
-              |- PB_IR_refine ?a' ?b' ?c' =>
-              replace a' with a by reflexivity;
-                replace b' with b by reflexivity;
-                replace c' with c
-            end; auto.
-            repeat match goal with
-                   | H : _ |- _ => clear H
-                   end.
-            f_equal. unfold type_cast. unfold eq_rect_r. simpl. do 3 gen_eq_rect. simpl.
-            destruct e. simpl. intros. destruct e. simpl. rewrite <- eq_rect_eq. reflexivity.
-            rewrite <- Heqy.
-            repeat match goal with
-                   | H : _ |- _ => clear H
-                   end.
-            unfold type_cast_r. unfold eq_rect_r. simpl. repeat gen_eq_rect. clear Heqp. clear e.
-            intros. revert e e0. rewrite Heqp. simpl. intros. f_equal. apply UIP.
+            2 : rewrite app_nil_r; reflexivity.
+            eapply E_embedded_some with (pf:=eq_refl) in H7; simpl in *; eauto.
           } {
             decode_opt_to_inv. subst.
             pose proof H2 as Hnil. apply PB_Message_IR_decode_nil in Hnil. subst.
@@ -2116,29 +2089,8 @@ Proof.
             clear IH. intuition.
             simpl in *. rewrite app_nil_r in H4, H8. subst.
             eexists _, _. repeat split; eauto.
-            2 : {
-              rewrite app_nil_r. reflexivity.
-            }
-            eapply Hc4 with (pf:=Heqp) in H7; eauto. clear H3.
-            match goal with
-            | H : PB_IR_refine ?a ?b ?c
-              |- PB_IR_refine ?a' ?b' ?c' =>
-              replace a' with a by reflexivity;
-                replace b' with b by reflexivity;
-                replace c' with c
-            end; auto.
-            repeat match goal with
-                   | H : _ |- _ => clear H
-                   end.
-            f_equal. unfold type_cast. unfold eq_rect_r. simpl. do 3 gen_eq_rect. simpl.
-            destruct e. simpl. intros. destruct e. simpl. rewrite <- eq_rect_eq. reflexivity.
-            revert Heqy.
-            repeat match goal with
-                   | H : _ |- _ => clear H
-                   end.
-            unfold type_cast_r. unfold eq_rect_r. simpl. repeat gen_eq_rect. clear Heqp e.
-            simpl. intros. revert e0 e Heqy. rewrite Heqp. simpl. intros ? ?.
-            replace e0 with e. auto. apply UIP.
+            2 : rewrite app_nil_r; reflexivity.
+            eapply E_embedded_none with (pf:=eq_refl) in H7; simpl in *; eauto.
           }
         } {
           apply PB_Message_boundedTag_correct in Heq. subst.
@@ -2146,47 +2098,15 @@ Proof.
             eapply IH in H1; eauto using PB_IR_measure_cons_lt. clear IH. intuition.
             destruct_many. simpl in *. rewrite app_nil_r in H3. subst.
             eexists _, _. repeat split; eauto.
-            2 : {
-              rewrite app_nil_r. reflexivity.
-            }
-            eapply Hc2 with (pf:=Heqp) in H1.
-            match goal with
-            | H : PB_IR_refine ?a ?b ?c
-              |- PB_IR_refine ?a' ?b' ?c' =>
-              replace a' with a by reflexivity;
-                replace b' with b by reflexivity;
-                replace c' with c
-            end; auto.
-            repeat match goal with
-                   | H : _ |- _ => clear H
-                   end.
-            f_equal. unfold type_cast, type_cast_r. unfold eq_rect_r. simpl. repeat gen_eq_rect.
-            clear e Heqp. intros. destruct e0. simpl. f_equal. repeat gen_eq_rect.
-            clear e Heqp e1. intros. rewrite <- eq_rect_eq_dec by apply PB_Type_eq_dec.
-            repeat f_equal. all : apply UIP.
+            2 : rewrite app_nil_r; reflexivity.
+            eapply E_repeated_cons with (pf:=eq_refl) in H1; simpl in *; eauto.
           } {
             destruct PB_WireType_eq_dec; [easy |]. injections.
             eapply IH in H1; eauto using PB_IR_measure_cons_lt. clear IH. intuition.
             destruct_many. simpl in *. rewrite app_nil_r in H3. subst.
             eexists _, _. repeat split; eauto.
-            2 : {
-              rewrite app_nil_r. reflexivity.
-            }
-            eapply Hc3 with (pf:=Heqp) in H1; eauto.
-            match goal with
-            | H : PB_IR_refine ?a ?b ?c
-              |- PB_IR_refine ?a' ?b' ?c' =>
-              replace a' with a by reflexivity;
-                replace b' with b by reflexivity;
-                replace c' with c
-            end; auto.
-            repeat match goal with
-                   | H : _ |- _ => clear H
-                   end.
-            f_equal. unfold type_cast, type_cast_r. unfold eq_rect_r. simpl. repeat gen_eq_rect.
-            clear e Heqp. intros. destruct e0. simpl. f_equal. repeat gen_eq_rect.
-            clear e Heqp e1. intros. rewrite <- eq_rect_eq_dec by apply PB_Type_eq_dec.
-            repeat f_equal. all : apply UIP.
+            2 : rewrite app_nil_r; reflexivity.
+            eapply E_repeated_app with (pf:=eq_refl) in H1; simpl in *; eauto.
           }
         } {
           apply PB_Message_boundedTag_correct in Heq. subst.
@@ -2198,34 +2118,18 @@ Proof.
           clear IH. intuition.
           simpl in *. rewrite app_nil_r in H4, H8. subst.
           eexists _, _. repeat split; eauto.
-          2 : {
-            rewrite app_nil_r. reflexivity.
-          }
-          eapply Hc6 with (pf:=Heqp) in H7; eauto. clear H3.
-          match goal with
-          | H : PB_IR_refine ?a ?b ?c
-            |- PB_IR_refine ?a' ?b' ?c' =>
-            replace a' with a by reflexivity;
-              replace b' with b by reflexivity;
-              replace c' with c
-          end; auto.
-          repeat match goal with
-                 | H : _ |- _ => clear H
-                 end.
-          f_equal. unfold type_cast, type_cast_r. unfold eq_rect_r. simpl. repeat gen_eq_rect.
-          clear e Heqp. intros. destruct e0. simpl. f_equal. repeat gen_eq_rect.
-          clear e Heqp e1. intros. rewrite <- eq_rect_eq_dec by apply PB_Type_eq_dec.
-          repeat f_equal. all : apply UIP.
+          2 : rewrite app_nil_r; reflexivity.
+          eapply E_repeated_embedded with (pf:=eq_refl) in H7; simpl in *; eauto.
         }
       } {
         apply PB_Message_boundedTag_correct' in Heq. subst.
         repeat destruct s; try easy.
         pose proof H1 as Hnil. apply PB_Message_IR_decode_nil in Hnil. subst.
-        pose proof (PB_IR_unknown desc) as Hc.
+        pose proof (PB_IR_unknown desc) as E_unknown.
         eapply IH in H1; eauto using PB_IR_measure_cons_lt. clear IH.
         destruct_many. simpl in *. rewrite app_nil_r in H3. subst.
         split; auto. eexists _, _.
-        eapply Hc in H2. repeat split; eauto. rewrite app_nil_r.
+        eapply E_unknown in H2. repeat split; eauto. rewrite app_nil_r.
         repeat f_equal.
       }
       Grab Existential Variables. all : auto.
