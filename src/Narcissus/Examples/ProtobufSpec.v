@@ -824,9 +824,9 @@ Proof.
   destruct desc; intros; try easy.
   simpl in ibound.
   revert desc boundi H fld H0 H1. pattern n, ibound.
-  apply Fin.caseS; intros; simpl in *.
+  apply Fin.caseS; intros.
   - subst. eapply PB_Field_inj; eauto. constructor.
-  - eapply PB_Field_inj; eauto. constructor. apply vector_in.
+  - eapply PB_Field_inj; eauto; clear H; simpl in *. constructor. apply vector_in.
     subst. rewrite <- (PB_Message_tags_correct (Build_PB_Message desc)). auto.
 Qed.
 
