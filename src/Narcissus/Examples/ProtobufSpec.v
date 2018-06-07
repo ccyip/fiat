@@ -950,17 +950,6 @@ Inductive PB_IRElm : Type :=
                      list PB_IRElm ->
                      PB_IRElm.
 
-Fixpoint PB_IRElm_ind'' (P : PB_IRElm -> Prop)
-         (f1 : forall n w s, P (Build_PB_IRElm n w (inl s)))
-         (f2 : forall n w l, Forall P l -> P (Build_PB_IRElm n w (inr l)))
-         (e : PB_IRElm)
-  : P e.
-Proof.
-  destruct e; destruct s; auto.
-  apply f2. induction l; constructor; auto.
-  apply PB_IRElm_ind''; auto.
-Defined.
-
 Section PB_IRElm_induction.
   Variable P : PB_IRElm -> Prop.
   Hypothesis f1 : forall n w s, P (Build_PB_IRElm n w (inl s)).
@@ -1325,28 +1314,92 @@ Qed.
 Local Transparent PB_LengthDelimited_decode.
 End PB_IRElm_body.
 
-(* :TODO: *)
-(* Fixpoint PB_IRElm_decode (desc : PB_Message) (b : ByteString) (cd : CacheDecode) *)
-(*   : option (PB_IRElm * ByteString * CacheDecode). *)
+(* Definition PB_IRElm_decode' *)
+(*   : forall b : ByteString, PB_Message -> CacheDecode -> *)
+(*                       option (PB_IRElm * ByteString * CacheDecode). *)
 (* Proof. *)
-(*   refine (PB_IRElm_decode_body *)
-(*             PB_IRElm_decode *)
-(*             (PB_IRElm_decode_body_lt PB_IRElm_decode _) *)
-(*             desc b cd). *)
+(*   refine (Fix well_founded_lt_b _ *)
+(*               (fun b rec desc cd => *)
+(*                  exist *)
+(*                    _ *)
+(*                    (`(a, b0, cd0) <- Varint_decode b cd; *)
+(*                     `() <- SizedList_decode PB_IRElm_decode' _ b0 cd0) *)
+(*                    (PB_IRElm_decode_body (fun desc' b' cd' => proj1_sig (rec b' _ desc' cd')) _ desc b cd) *)
+(*                    _)). *)
+
+(* Definition PB_IRElm_decode' *)
+(*   : forall b : ByteString, PB_Message -> CacheDecode -> *)
+(*     {a : option (PB_IRElm * ByteString * CacheDecode) | *)
+(*      forall elm b' cd', a = Some (elm, b', cd') -> lt_B b' b}. *)
+(* Proof. *)
+(*   refine (Fix well_founded_lt_b _ *)
+(*               (fun b rec desc cd => *)
+(*                  exist *)
+(*                    _ *)
+(*                    (PB_IRElm_decode_body (fun desc' b' cd' => proj1_sig (rec b' _ desc' cd')) _ desc b cd) *)
+(*                    _)). *)
+(*   intros. *)
+(*   apply PB_IRElm_decode_body_lt in H. assumption. *)
+(*   Show Proof. *)
+(*   Grab Existential Variables. *)
+(*   intros. *)
+(*   destruct rec. simpl in *. eauto. *)
 
 Definition PB_IR := list PB_IRElm.
 
+Definition PB_IR_measure' f :=
+  fix ir_measure (ir : PB_IR) :=
+    match ir with
+    | nil => 0
+    | elm :: ir' =>
+      f elm + ir_measure ir'
+    end.
+Arguments PB_IR_measure' /.
+
+Fixpoint PB_IRElm_measure (elm : PB_IRElm) :=
+  match elm with
+  | Build_PB_IRElm _ _ v =>
+    1 + match v with
+        | inr ir =>
+          PB_IR_measure' PB_IRElm_measure ir
+        | _ => 0
+        end
+  end.
+
+Definition PB_IR_measure (ir : PB_IR) := PB_IR_measure' PB_IRElm_measure ir.
+
+Theorem PB_IR_mappend_measure
+  : forall ir ir', PB_IR_measure (ir ++ ir') = (PB_IR_measure ir) + (PB_IR_measure ir').
+Proof.
+  induction ir; intros. easy.
+  simpl. specialize (IHir ir').
+  omega.
+Qed.
+
 Instance PB_IR_monoid : Monoid PB_IR :=
   {| mappend := @app _;
-     bin_measure := @length _;
+     bin_measure := PB_IR_measure;
      mempty := nil;
-     mappend_measure := @app_length _;
+     mappend_measure := PB_IR_mappend_measure;
      mempty_left := @app_nil_l _;
      mempty_right := @app_nil_r _;
      mappend_assoc := @app_assoc _
   |}.
 
-Inductive PB_IR_refine
+Lemma PB_IR_measure_cons_lt (ir : PB_IR)
+  : forall elm, lt_B ir (elm :: ir).
+Proof.
+  unfold lt_B. destruct 0. simpl. omega.
+Qed.
+
+Lemma PB_IR_measure_embedded_lt (ir ir' : PB_IR)
+  : forall t wty, lt_B ir' (Build_PB_IRElm t wty (inr ir') :: ir).
+Proof.
+  unfold lt_B. intros. simpl.
+  unfold PB_IR_measure. simpl.
+  omega.
+Qed.
+
   : forall {desc : PB_Message}, PB_IR -> PB_Message_denote desc -> Prop :=
 | PB_IR_nil desc :
     PB_IR_refine nil
