@@ -437,6 +437,51 @@ Definition PB_Message_tags' {n} (desc : PB_Desc n) :=
 Definition PB_Message_tags (desc : PB_Message) :=
   PB_Message_tags' (PB_MessageDesc desc).
 
+Definition vec_eq_dec
+           {A} (A_eq_dec : forall (a1 a2 : A), {a1 = a2} + {a1 <> a2})
+  : forall {n} (v1 v2 : Vector.t A n), {v1 = v2} + {v1 <> v2}.
+Proof.
+  refine (@Vector.rect2 _ _ _ _ _). {
+    left. reflexivity.
+  } {
+    intros.
+    destruct (A_eq_dec a b). {
+      destruct H. {
+        left. subst. reflexivity.
+      } {
+        right. inversion 1. existT_eq_dec. easy.
+      }
+    } {
+      right. inversion 1. easy.
+    }
+  }
+Defined.
+
+Fixpoint PB_SingularType_eq_dec (sty1 sty2 : PB_SingularType)
+  : {sty1 = sty2} + {sty1 <> sty2}
+with PB_Type_eq_dec (ty1 ty2 : PB_Type)
+     : {ty1 = ty2} + {ty1 <> ty2}
+with PB_Field_eq_dec (fld1 fld2 : PB_Field)
+     : {fld1 = fld2} + {fld1 <> fld2}
+with PB_Message_eq_dec (desc1 desc2 : PB_Message)
+  : {desc1 = desc2} + {desc1 <> desc2}.
+Proof.
+  all : repeat decide equality.
+  destruct desc1 as [n1 desc1], desc2 as [n2 desc2].
+  destruct (Nat.eq_dec n1 n2). {
+    destruct e.
+    assert ({desc1 = desc2} + {desc1 <> desc2}) as L. {
+      apply vec_eq_dec. auto.
+    }
+    clear PB_Message_eq_dec.
+    destruct L.
+    - left. subst. reflexivity.
+    - right. inversion 1.
+      existT_eq_dec. easy.
+  } {
+    right. inversion 1. easy.
+  }
+Defined.
 
 Definition PB_Message_heading' denote (desc : PB_Message) :=
   BuildHeading (Vector.map denote (PB_MessageDesc desc)).
