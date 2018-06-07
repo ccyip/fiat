@@ -1856,20 +1856,37 @@ Definition PB_Message_IR_decode (desc : PB_Message)
   : DecodeM (PB_Message_denote desc) PB_IR :=
   PB_Message_IR_decode_strong desc (PB_Message_default desc).
 
+Ltac fix_PB_Message_tagToType :=
+  match goal with
+  | |- context [match PB_Message_tagToType ?t with _ => _ end
+                 (@PB_Message_update ?d ?a ?t) (@PB_Message_lookup ?d ?a ?t)] =>
+    try destruct d;
+    unfold PB_Message_update, PB_Message_lookup, PB_Message_update', PB_Message_lookup' in *;
+    generalize (PB_Message_tagToDenoteType_correct _ t)
+  end.
+
+Lemma PB_Message_IR_decode_nil (desc : PB_Message)
+      (init msg : PB_Message_denote desc) (ir ir' : PB_IR)
       (cd cd' : CacheDecode)
-  : PB_Message_IR_decode desc ir cd = Some (msg, ir', cd') -> ir' = nil.
+  : PB_Message_IR_decode_strong desc init ir cd = Some (msg, ir', cd') -> ir' = nil.
 Proof.
-  generalize dependent msg.
-  generalize dependent cd.
-  generalize dependent cd'.
-  induction ir; intros.
-  - inversion H. auto.
-  - simpl in H. destruct a.
+  unfold PB_Message_IR_decode_strong, PB_Message_IR_decode'. destruct desc as [n desc].
+  intros.
+  induction ir as [ir IH] using (well_founded_ind well_founded_lt_b); intros.
+  rewrite Init.Wf.Fix_eq in H by solve_extensionality.
+  destruct ir. injections. easy.
+  destruct p. destruct PB_Message_boundedTag eqn:?. {
     decode_opt_to_inv.
-    destruct PB_Message_boundedTag; try easy.
-    destruct PB_Type_eq_dec; try easy.
-    inversion H0. subst.
-    eapply IHir; eauto.
+    revert H0. fix_PB_Message_tagToType.
+    destruct PB_Message_tagToType eqn:?; destruct p; intros;
+      destruct PB_WireType_eq_dec; repeat destruct s; injections; try easy.
+    destruct type_cast_r; decode_opt_to_inv; easy.
+    destruct PB_WireType_eq_dec; injections; try easy.
+    destruct type_cast_r; decode_opt_to_inv; easy.
+  } {
+    repeat destruct s; try easy.
+    eapply IH; eauto. apply PB_IR_measure_cons_lt.
+  }
 Qed.
 
 Theorem PB_Message_IR_decode_correct {n} (desc : PB_Message n)
