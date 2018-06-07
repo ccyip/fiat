@@ -431,8 +431,12 @@ Definition PB_MessageLen (desc : PB_Message) :=
 Definition PB_MessageDesc (desc : PB_Message) :=
   let (_, v) return (Vector.t _ (PB_MessageLen desc)) := desc in v.
 
+Definition PB_Message_tags' {n} (desc : PB_Desc n) :=
+  Vector.map PB_FieldTag desc.
+
 Definition PB_Message_tags (desc : PB_Message) :=
-  Vector.map PB_FieldTag (PB_MessageDesc desc).
+  PB_Message_tags' (PB_MessageDesc desc).
+
 
 Definition PB_Message_heading' denote (desc : PB_Message) :=
   BuildHeading (Vector.map denote (PB_MessageDesc desc)).
