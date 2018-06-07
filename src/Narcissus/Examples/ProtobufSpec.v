@@ -717,6 +717,13 @@ Proof.
   subst. eapply vector_in; eauto.
 Qed.
 
+Theorem BoundedTag_not_unbounded (desc : PB_Message)
+  : forall (t1 : BoundedTag desc) (t2 : UnboundedTag desc), bindex t1 <> uindex t2.
+Proof.
+  intros. intro. pose proof (BoundedTag_in _ t1). destruct t2. simpl in *.
+  subst. easy.
+Qed.
+
 Fixpoint PB_Message_boundedTag' {n} (tags : Vector.t N n) (m : N)
   : {ibound : _ | Vector.nth tags ibound = m} + {~ Vector.In m tags}.
 Proof.
@@ -760,6 +767,33 @@ Proof.
   unfold PB_Message_boundedTag.
   intros. destruct PB_Message_boundedTag'. destruct s.
   easy. inversion H. reflexivity.
+Qed.
+
+Theorem PB_Message_boundedTag_inv (desc : PB_Message)
+  : PB_Message_OK desc -> forall tag, PB_Message_boundedTag desc (bindex tag) = inl tag.
+Proof.
+  intros. destruct (PB_Message_boundedTag desc (bindex tag)) eqn:?.
+  apply PB_Message_boundedTag_correct in Heqs.
+  apply BoundedTag_inj in Heqs; eauto. subst. auto.
+  exfalso. apply PB_Message_boundedTag_correct' in Heqs.
+  destruct tag as [? [? ?]]. destruct u. simpl in *.
+  subst. apply uboundi0. apply vector_in.
+Qed.
+
+Theorem PB_Message_boundedTag_notr (desc : PB_Message)
+  : PB_Message_OK desc -> forall (tag : BoundedTag desc) utag, PB_Message_boundedTag desc (bindex tag) <> inr utag.
+Proof.
+  intros. intro. apply PB_Message_boundedTag_correct' in H0.
+  destruct desc. destruct tag as [? [? ?]]; destruct utag. simpl in *. subst.
+  apply uboundi0. apply vector_in.
+Qed.
+
+Theorem PB_Message_boundedTag_notl (desc : PB_Message)
+  : PB_Message_OK desc -> forall (utag : UnboundedTag desc) tag, PB_Message_boundedTag desc (uindex utag) <> inl tag.
+Proof.
+  intros. intro. apply PB_Message_boundedTag_correct in H0.
+  destruct desc. destruct tag as [? [? ?]]; destruct utag. simpl in *. subst.
+  apply uboundi0. apply vector_in.
 Qed.
 
 Definition PB_Message_tagToIndex {desc : PB_Message}
