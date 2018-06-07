@@ -1731,12 +1731,23 @@ Qed.
 Local Transparent computes_to.
 Local Transparent Pick.
 
-Lemma PB_Message_IR_Elm_OK {n} (desc : PB_Message n)
-      (HP : PB_Message_OK desc)
-      (msg : PB_Message_denote desc) (ir : PB_IR)
-      (ce ce' : CacheFormat)
-  : PB_Message_IR_format desc msg ce ↝ (ir, ce') ->
-    forall elm : PB_IRElm, In elm ir -> PB_IRElm_OK desc elm.
+Ltac choose_br n :=
+  match n with
+  | O => try left
+  | S ?n' => right; choose_br n'
+  end.
+
+Ltac destruct_many :=
+  repeat first [match goal with
+                | H : ?a \/ ?b |- _ => destruct H
+                end |
+                match goal with
+                | [ H : ex _ |- _ ] => destruct H
+                end |
+                match goal with
+                | H : ?a /\ ?b |- _ => destruct H
+                end].
+
 
 Definition PB_Message_IR_format_ref (desc : PB_Message)
   : FormatM (PB_Message_denote desc) PB_IR :=
@@ -1750,18 +1761,101 @@ Definition PB_Message_IR_format (desc : PB_Message)
   : FormatM (PB_Message_denote desc) PB_IR :=
   PB_Message_IR_format_strong desc (PB_Message_default desc).
 
+Definition PB_Message_IR_decode'
+  : PB_IR -> forall desc, PB_Message_denote desc -> CacheDecode ->
+                    option (PB_Message_denote desc * PB_IR * CacheDecode).
 Proof.
-  unfold PB_Message_IR_format. unfold computes_to. unfold Pick.
-  simpl. induction 1; intros; try easy.
-  destruct H0; auto. subst.
-  unfold PB_IRElm_OK. simpl. destruct PB_Message_boundedTag eqn:Hb.
-  - apply PB_Message_boundedTag_correct in Hb.
-    apply BoundedTag_inj in Hb; auto. subst. auto.
-  - contradiction (BoundedTag_in _ t).
-Qed.
+  refine
+    (Fix well_founded_lt_b _
+         (fun ir =>
+            match ir with
+            | nil => fun decode desc (msg : PB_Message_denote desc) cd => Some (msg, nil, cd)
+            | Build_PB_IRElm t wty v :: ir' =>
+              fun decode desc (msg : PB_Message_denote desc) cd =>
+                match PB_Message_boundedTag desc t with
+                | inl tag =>
+                  `(msg1, _, cd1) <- decode ir' _ desc msg cd;
+                  match PB_Message_tagToType tag as x
+                        return (PB_Type_denote x -> PB_Message_denote desc) ->
+                               (PB_Type_denote x) ->
+                               _ with
+                  | PB_Singular (PB_Primitive pty) =>
+                    fun f a =>
+                      match PB_WireType_eq_dec wty (PB_PrimitiveType_toWireType pty) with
+                      | left pf =>
+                        match v with
+                        | inl (inl v') =>
+                          Some (f (eq_rect _ _ v' _ pf), nil, cd1)
+                        | _ => None
+                        end
+                      | _ => None
+                      end
+                  | PB_Repeated (PB_Primitive pty) =>
+                    fun f a =>
+                      match PB_WireType_eq_dec wty (PB_PrimitiveType_toWireType pty) with
+                      | left pf =>
+                        match v with
+                        | inl (inl v') =>
+                          Some (f (a ++ [(eq_rect _ _ v' _ pf)]), nil, cd1)
+                        | inl (inr l) =>
+                          if PB_WireType_eq_dec PB_LengthDelimited (PB_PrimitiveType_toWireType pty) then None
+                          else Some (f (a ++ (eq_rect _ (fun wty => list (PB_WireType_denote wty)) l _ pf)), nil, cd1)
+                        | _ => None
+                        end
+                      | _ => None
+                      end
+                  | PB_Singular (PB_Embedded desc') =>
+                    fun f a =>
+                      match PB_WireType_eq_dec wty PB_LengthDelimited with
+                      | left pf =>
+                        match v return _ -> _ with
+                        | inr ir2 =>
+                          fun decode =>
+                            match a with
+                            | Some msg2 =>
+                              `(msg3, _, cd2) <- decode ir2 _ desc' msg2 cd1;
+                              Some (f (Some msg3), nil, cd2)
+                            | None =>
+                              `(msg2, _, cd2) <- decode ir2 _ desc' (PB_Message_default desc') cd1;
+                              Some (f (Some msg2), nil, cd2)
+                            end
+                        | _ => fun _ => None
+                        end decode
+                      | _ => None
+                      end
+                  | PB_Repeated (PB_Embedded desc') =>
+                    fun f a =>
+                      match PB_WireType_eq_dec wty PB_LengthDelimited with
+                      | left pf =>
+                        match v return _ -> _ with
+                        | inr ir2 =>
+                          fun decode =>
+                            `(msg2, _, cd2) <- decode ir2 _ desc' (PB_Message_default desc') cd1;
+                            Some (f (a ++ [msg2]), nil, cd2)
+                        | _ => fun _ => None
+                        end decode
+                      | _ => None
+                      end
+                  end (PB_Message_update msg1 tag) (PB_Message_lookup msg1 tag)
+                | inr _ =>
+                  match v with
+                  | inl (inl _) => decode ir' _ desc msg cd
+                  | _ => None
+                  end
+                end
+            end));
+    apply PB_IR_measure_cons_lt || apply PB_IR_measure_embedded_lt.
+Defined.
 
-Lemma PB_Message_IR_decode_nil {n} (desc : PB_Message n)
-      (msg : PB_Message_denote desc) (ir ir' : PB_IR)
+Definition PB_Message_IR_decode_strong (desc : PB_Message) (init : PB_Message_denote desc)
+  : DecodeM (PB_Message_denote desc) PB_IR :=
+  fun ir cd =>
+    PB_Message_IR_decode' ir desc init cd.
+
+Definition PB_Message_IR_decode (desc : PB_Message)
+  : DecodeM (PB_Message_denote desc) PB_IR :=
+  PB_Message_IR_decode_strong desc (PB_Message_default desc).
+
       (cd cd' : CacheDecode)
   : PB_Message_IR_decode desc ir cd = Some (msg, ir', cd') -> ir' = nil.
 Proof.
