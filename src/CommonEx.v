@@ -303,48 +303,84 @@ Proof.
   }
 Qed.
 
-Lemma fix_format_correct
-      {A B} {cache : Cache} {monoid : Monoid B}
-      {P : CacheDecode -> Prop}
-      {P_inv : (CacheDecode -> Prop) -> Prop}
-      (predicate : A -> Prop) (predicate_rest : A -> B -> Prop)
-      (format_body : funType [A; CacheFormat] (B * CacheFormat) ->
-                     funType [A; CacheFormat] (B * CacheFormat))
-      (decode_body : forall b : B,
-          (forall b' : B, lt_B b' b -> CacheDecode -> option (A * B * CacheDecode)) ->
-          CacheDecode -> option (A * B * CacheDecode))
-      (format_body_OK : Frame.monotonic_function format_body)
-      (P_inv_OK : cache_inv_Property P P_inv)
-      (decode_body_correct :
-         cache_inv_Property P P_inv ->
-         forall (format : funType [A; CacheFormat] (B * CacheFormat)) decode,
-           refineEquivFun format (format_body format) ->
-           (forall b cd, decode b cd = decode_body b (fun b' _ => decode b') cd) ->
-           CorrectDecoder monoid predicate predicate_rest
-                          (format_body format)
-                          (fun b => decode_body b (fun b' _ => decode b'))
-                          P)
-  : CorrectDecoder
-      monoid predicate predicate_rest
-      (LeastFixedPoint format_body) (Fix well_founded_lt_b _ decode_body) P.
-Proof.
-  specialize (decode_body_correct P_inv_OK).
-  split; intros. {
-    rewrite Init.Wf.Fix_eq by solve_extensionality.
-    eapply decode_body_correct; eauto.
-    split.
-    eapply (unroll_LeastFixedPoint format_body_OK); eauto.
-    eapply (unroll_LeastFixedPoint' format_body_OK); eauto.
-    intros; rewrite Init.Wf.Fix_eq by solve_extensionality; eauto.
-    eapply (unroll_LeastFixedPoint format_body_OK); eauto.
-  } {
-    rewrite Init.Wf.Fix_eq in H1 by solve_extensionality.
-    eapply decode_body_correct in H1; eauto.
-    intuition; destruct_ex; eexists _, _; intuition eauto.
-    eapply (unroll_LeastFixedPoint' format_body_OK); eauto.
-    split.
-    eapply (unroll_LeastFixedPoint format_body_OK); eauto.
-    eapply (unroll_LeastFixedPoint' format_body_OK); eauto.
-    intros; rewrite Init.Wf.Fix_eq by solve_extensionality; eauto.
-  }
-Qed.
+Section Fix_format_correct.
+
+  Context {A B : Type}.
+  Context {cache : Cache}.
+  Context {monoid : Monoid B}.
+  Context {P : CacheDecode -> Prop}.
+  Context {P_inv : (CacheDecode -> Prop) -> Prop}.
+  Variable predicate : A -> Prop.
+  Variable predicate_rest : A -> B -> Prop.
+  Variable format_body : funType [A; CacheFormat] (B * CacheFormat) ->
+                         funType [A; CacheFormat] (B * CacheFormat).
+  Variable format_body_OK : Frame.monotonic_function format_body.
+  Variable decode_body : forall b : B,
+      (forall b' : B, lt_B b' b -> CacheDecode -> option (A * B * CacheDecode)) ->
+      CacheDecode -> option (A * B * CacheDecode).
+  Variable P_inv_OK : cache_inv_Property P P_inv.
+
+  Definition CorrectDecoderE decode data env bin xenv : Prop :=
+    forall env' ext,
+      P env' ->
+      Equiv env env' ->
+      predicate data ->
+      predicate_rest data ext ->
+      exists xenv',
+        decode (mappend bin ext) env' = Some (data, ext, xenv') /\ Equiv xenv xenv' /\ P xenv'.
+  Global Arguments CorrectDecoderE /.
+
+  Definition CorrectDecoderD format decode bin : Prop :=
+    forall env env' xenv' data ext,
+      Equiv env env' ->
+      P env' ->
+      decode env' = Some (data, ext, xenv') ->
+      P xenv' /\
+      (exists bin' xenv,
+          format data env ↝ (bin', xenv) /\ bin = mappend bin' ext /\ predicate data /\ Equiv xenv xenv').
+  Global Arguments CorrectDecoderD /.
+
+  Local Transparent computes_to.
+  Lemma fix_format_correct
+        (decode_body_correct :
+           cache_inv_Property P P_inv ->
+           (forall decode data env bin xenv,
+               format_body (fun data env x => CorrectDecoderE decode data env (fst x) (snd x)) data env ↝ (bin, xenv) ->
+               CorrectDecoderE (fun b => decode_body b (fun b' _ => decode b')) data env bin xenv) /\
+           (forall (format : funType [A; CacheFormat] (B * CacheFormat)) bin
+              (decode : forall b', lt_B b' bin -> CacheDecode -> option (A * B * CacheDecode)),
+               (forall b' (pf : lt_B b' bin), CorrectDecoderD format (decode b' pf) b') ->
+               CorrectDecoderD (format_body format) (decode_body bin decode) bin))
+    : CorrectDecoder
+        monoid predicate predicate_rest
+        (LeastFixedPoint format_body) (Fix well_founded_lt_b _ decode_body) P.
+  Proof.
+    specialize (decode_body_correct P_inv_OK).
+    split; intros. {
+      match goal with
+      | |- exists _, ?f _ _ = _ /\ _ =>
+        eapply (LeastFixedPoint_ind format_body (fun data env x => CorrectDecoderE f data env (fst x) (snd x))) in H2
+      end.
+      simpl in *.
+      3 : apply refineFun_refl.
+      apply H2; eauto.
+      unfold refineFun, refine. destruct 0. intros.
+      apply decode_body_correct in H3. simpl in *.
+      unfold computes_to. simpl. intros.
+      rewrite Init.Wf.Fix_eq by solve_extensionality. apply H3; eauto.
+    } {
+      generalize dependent ext.
+      generalize dependent data.
+      generalize dependent xenv'.
+      generalize dependent env'.
+      generalize dependent env.
+      induction bin using (well_founded_ind well_founded_lt_b); intros.
+      rewrite Init.Wf.Fix_eq in H2 by solve_extensionality.
+      eapply decode_body_correct in H2; eauto.
+      destruct_many. intuition eauto. eexists _, _. intuition eauto.
+      eapply (unroll_LeastFixedPoint' format_body_OK); eauto.
+      simpl in *. intros. eauto.
+    }
+  Qed.
+
+End Fix_format_correct.
