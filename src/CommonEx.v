@@ -98,35 +98,89 @@ Proof.
   exact v.
 Defined.
 
-Definition CorrectDecoderWf
-           {A B} {cache : Cache}
-           {F : B -> Type}
-           (monoid : Monoid B)
-           (predicate : A -> Prop)
-           (rest_predicate : A -> B -> Prop)
-           (format : FormatM A B)
-           (decode : forall b, F b -> CacheDecode -> option (A * B * CacheDecode))
-           (decode_inv : CacheDecode -> Prop) :=
-  (forall env env' xenv data bin ext
-     (env_OK : decode_inv env'),
-      Equiv env env' ->
-      predicate data ->
-      rest_predicate data ext ->
-      format data env ↝ (bin, xenv) ->
-      forall pf,
-      exists xenv',
-        decode (mappend bin ext) pf env' = Some (data, ext, xenv')
-        /\ Equiv xenv xenv' /\ decode_inv xenv') /\
-  (forall env env' xenv' data bin ext pf,
-      Equiv env env'
-      -> decode_inv env'
-      -> decode bin pf env' = Some (data, ext, xenv')
-      -> decode_inv xenv'
-        /\ exists bin' xenv,
-          (format data env ↝ (bin', xenv))
-          /\ bin = mappend bin' ext
-          /\ predicate data
-          /\ Equiv xenv xenv').
+Section DecodeWf.
+
+  Context {A : Type}.
+  Context {B : Type}.
+  Context {cache : Cache}.
+
+  Definition CorrectDecoderWf
+             {F : B -> Type}
+             (monoid : Monoid B)
+             (predicate : A -> Prop)
+             (rest_predicate : A -> B -> Prop)
+             (format : FormatM A B)
+             (decode : forall b, F b -> CacheDecode -> option (A * B * CacheDecode))
+             (decode_inv : CacheDecode -> Prop) :=
+    (forall env env' xenv data bin ext
+       (env_OK : decode_inv env'),
+        Equiv env env' ->
+        predicate data ->
+        rest_predicate data ext ->
+        format data env ↝ (bin, xenv) ->
+        forall pf,
+        exists xenv',
+          decode (mappend bin ext) pf env' = Some (data, ext, xenv')
+          /\ Equiv xenv xenv' /\ decode_inv xenv') /\
+    (forall env env' xenv' data bin ext pf,
+        Equiv env env'
+        -> decode_inv env'
+        -> decode bin pf env' = Some (data, ext, xenv')
+        -> decode_inv xenv'
+          /\ exists bin' xenv,
+            (format data env ↝ (bin', xenv))
+            /\ bin = mappend bin' ext
+            /\ predicate data
+            /\ Equiv xenv xenv').
+
+  Context {monoid : Monoid B}.
+  Context {P : CacheDecode -> Prop}.
+  Variable predicate : A -> Prop.
+  Variable predicate_rest : A -> B -> Prop.
+  Variable bound : B.
+  Variable decode : DecodeM A B.
+  (* :TODO: lt_B to F? *)
+  Variable decodeWf : forall b, lt_B b bound -> CacheDecode -> option (A * B * CacheDecode).
+
+  Definition decode_wf_eq
+    := forall b cd pf, decode b cd = decodeWf b pf cd.
+
+  Theorem decodeWf_correct
+    : decode_wf_eq ->
+      forall format,
+      CorrectDecoder monoid predicate predicate_rest format decode P ->
+      CorrectDecoderWf monoid predicate predicate_rest format decodeWf P.
+  Proof.
+    intros. unfold decode_wf_eq in *.
+    split; intros. {
+      destruct H0 as [? _]. edestruct H0; eauto. destruct_many.
+      eexists. repeat split; eauto. congruence.
+    } {
+      destruct H0 as [_ ?]. edestruct H0; eauto. congruence.
+    }
+  Qed.
+
+  Theorem decodeWf_lt
+    : decode_wf_eq ->
+      (forall b cd d b' cd',
+          decode b cd = Some (d, b', cd') -> lt_B b' b) ->
+      forall b pf cd d b' cd',
+        decodeWf b pf cd = Some (d, b', cd') -> lt_B b' b.
+  Proof.
+    intros. unfold decode_wf_eq in *. rewrite <- H in H1. eauto.
+  Qed.
+
+  Theorem decodeWf_le
+    : decode_wf_eq ->
+      (forall b cd d b' cd',
+          decode b cd = Some (d, b', cd') -> le_B b' b) ->
+      forall b pf cd d b' cd',
+        decodeWf b pf cd = Some (d, b', cd') -> le_B b' b.
+  Proof.
+    intros. unfold decode_wf_eq in *. rewrite <- H in H1. eauto.
+  Qed.
+
+End DecodeWf.
 
 Import Ensembles.
 
