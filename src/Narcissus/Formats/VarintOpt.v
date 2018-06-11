@@ -167,18 +167,12 @@ Section Varint.
                      Varint_format Varint_decode P.
   Proof.
     unfold Varint_format, Varint_decode, Varint_body.
-    eapply fix_format_correct; eauto.
-    apply Varint_body_monotone. intros _ ? ? A1 A2.
-    destruct (Word_decode_correct (sz := 8) (P := P)) as [He Hd]; eauto.
+    eapply fix_format_correct; eauto. apply Varint_body_monotone.
+    intros _.
     split; intros. {
-      clear H0 H1 Hd.
-      generalize dependent bin.
-      generalize dependent ext.
-      generalize dependent env.
-      generalize dependent env'.
-      generalize dependent xenv.
-      induction data using (well_founded_ind N.lt_wf_0); intros.
-      unfold Varint_body in *.
+      simpl. intros.
+      clear H2 H3.
+      destruct (Word_decode_correct (sz := 8) (P := P)) as [He _]; eauto.
       destruct N.div_eucl as [q r] eqn:Hdiv.
       destruct q. {
         edestruct He as [? [? [? ?]]]; eauto.
@@ -195,10 +189,7 @@ Section Varint.
       } {
         computes_to_inv2.
         edestruct He as [? [? [? ?]]]; eauto.
-        edestruct H as [? [? [? ?]]]; eauto.
-        eapply div_eucl_div_lt; eauto; try easy.
-        destruct data. inversion Hdiv. easy.
-        apply A1. eauto.
+        simpl in H'. edestruct H' as [? [? [? ?]]]; eauto. simpl fst in *; simpl snd in *.
         eexists. repeat split; eauto.
         edestruct @Decode_w_Measure_lt_eq
           with (A_decode := (decode_word (sz := 8))); eauto.
@@ -208,23 +199,17 @@ Section Varint.
           by (eapply div_eucl_mod_lt_sz_add with (sz := 7%nat); eauto).
         rewrite (proj2 (N.ltb_ge _ _))
           by (rewrite N.add_comm; apply N.le_add_r).
-        rewrite A2. rewrite H5.
-        unfold DecodeBindOpt2, BindOpt, If_Opt_Then_Else.
+        rewrite H5. simpl.
         repeat progress f_equal.
         pose proof (N.div_eucl_spec data (2^7)).
         rewrite Hdiv in H9. rewrite H9.
         rewrite N.add_sub. reflexivity.
       }
     } {
-      clear He.
-      generalize dependent env.
-      generalize dependent env'.
-      generalize dependent xenv'.
-      generalize dependent data.
-      generalize dependent ext.
-      induction bin using (well_founded_ind well_founded_lt_b); intros.
-      decode_opt_to_inv. destruct x1.
-      apply Decode_w_Measure_lt_eq_inv in H1. simpl in H1.
+      destruct (Word_decode_correct (sz := 8) (P := P)) as [_ Hd]; eauto.
+      simpl in H. simpl. intros.
+      decode_opt_to_inv. destruct x0.
+      apply Decode_w_Measure_lt_eq_inv in H2. simpl in H2.
       edestruct Hd as [? [? [? [? [? [? ?]]]]]]; eauto.
       destruct N.ltb eqn:Hlt. {
         inversion H3. clear H3. subst. split; eauto.
@@ -235,7 +220,7 @@ Section Varint.
           apply N.div_small.
           apply N.ltb_lt. auto.
         }
-        assert (r = wordToN x0) as L2. {
+        assert (r = wordToN x) as L2. {
           apply div_eucl_mod in Hdiv. subst.
           apply N.mod_small.
           apply N.ltb_lt. auto.
@@ -244,15 +229,13 @@ Section Varint.
       } {
         simpl proj1_sig in H3. 
         decode_opt_to_inv.
-        destruct x5. easy.
+        destruct x4. easy.
         inversion H9. clear H9. subst.
         edestruct H as [? [? [? [? [? [? ?]]]]]]; eauto.
-        rewrite <- A2; eauto.
         subst. split; eauto.
         eexists _, _. repeat split; eauto.
-        apply A1 in H9.
-        simpl. destruct N.div_eucl as [q r] eqn:Hdiv.
-        assert (wordToN x0 - (2^7) < (2^7)) as L0. {
+        destruct N.div_eucl as [q r] eqn:Hdiv.
+        assert (wordToN x - (2^7) < (2^7)) as L0. {
           apply N.add_lt_mono_r with (p := 2^7).
           rewrite N.sub_add by (apply N.ltb_ge; auto).
           replace (2^7 + 2^7) with (2^(N.of_nat 8)) by auto.
@@ -263,7 +246,7 @@ Section Varint.
           symmetry.
           eapply N.div_unique; eauto.
         }
-        assert (r = (wordToN x0 - (2^7))) as L2. {
+        assert (r = (wordToN x - (2^7))) as L2. {
           apply div_eucl_mod in Hdiv. subst.
           symmetry.
           eapply N.mod_unique; eauto.
