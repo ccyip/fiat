@@ -165,10 +165,10 @@ Section Varint.
   Theorem Varint_decode_correct
           {P : CacheDecode -> Prop}
           (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b)))
-    : forall b, CorrectDecoder' monoid
-                     (fun _ => True)
-                     (fun _ _ => True)
-                     Varint_format Varint_decode P b.
+    :CorrectDecoder monoid
+                    (fun _ => True)
+                    (fun _ _ => True)
+                    Varint_format Varint_decode P.
   Proof.
     unfold Varint_format, Varint_decode, Varint_format_body, Varint_decode_body.
     eapply fix_format_correct; eauto. apply Varint_format_body_monotone.
