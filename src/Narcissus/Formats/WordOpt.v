@@ -48,6 +48,18 @@ Section Word.
     | S n' => fun w => WS (whd w) (word_split_tl (wtl w))
     end w.
 
+  Lemma format_word_some
+    : (0 < sz)%nat ->
+      forall w ce b ce',
+      format_word w ce ↝ (b, ce') ->
+      (0 < bin_measure b)%nat.
+  Proof.
+    unfold format_word. intros. destruct w. easy.
+    inversion H0. rewrite measure_enqueue.
+    assert (0 < B_measure b0)%nat by apply B_measure_gt_0.
+    omega.
+  Qed.
+
   Lemma word_split_SW {n}
     : forall (w : word (S n)),
       w = SW_word (word_split_hd w) (word_split_tl w).
