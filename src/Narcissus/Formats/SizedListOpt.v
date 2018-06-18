@@ -4,10 +4,14 @@ Require Import
 
 Require Import
         Fiat.CommonEx
+        Fiat.Common.Frame
+        Fiat.Computation.FixComp
         Fiat.Narcissus.BinLib.Core
         Fiat.Narcissus.Common.Notations
         Fiat.Narcissus.Common.Specs
         Fiat.Narcissus.Common.ComposeOpt.
+
+Import FixComp.LeastFixedPointFun.
 
 Section SizedList.
   Context {A : Type}.
@@ -20,20 +24,20 @@ Section SizedList.
   Variable A_format : FormatM A B.
   Variable A_decode : DecodeM A B.
   Variable A_cache_inv : CacheDecode -> Prop.
-  Variable A_format_sz_eq : forall x b1 b2 ce1 ce1' ce2 ce2', A_format x ce1 ↝ (b1, ce1') ->
-                                                         A_format x ce2 ↝ (b2, ce2') ->
-                                                         bin_measure b1 = bin_measure b2.
+  Variable A_format_sz_eq : forall x b1 b2 ce1 ce1' ce2 ce2',
+      A_format x ce1 ↝ (b1, ce1') ->
+      A_format x ce2 ↝ (b2, ce2') ->
+      bin_measure b1 = bin_measure b2.
   Variable A_format_byte : forall d b ce ce', A_format d ce ↝ (b, ce') -> bin_measure b mod 8 = 0.
+  Variable A_format_some : forall d b ce ce', A_format d ce ↝ (b, ce') -> 0 < bin_measure b.
+  (* Could be le. *)
   Variable A_decode_lt : forall b cd x b' cd', A_decode b cd = Some (x, b', cd') -> lt_B b' b.
   Variable A_decode_correct : CorrectDecoder monoid A_predicate A_predicate_rest A_format A_decode A_cache_inv.
 
-  Variable Wf_bound : B.
-  Variable Wf_decode : forall b, lt_B b Wf_bound -> CacheDecode -> option (A * B * CacheDecode).
-  Variable Wf_decode_lt : forall b pf cd x b' cd', Wf_decode b pf cd = Some (x, b', cd') -> lt_B b' b.
-  Variable Wf_decode_correct : CorrectDecoderWf monoid A_predicate A_predicate_rest A_format Wf_decode A_cache_inv.
-
-  Definition SizedList_format : FormatM (list A) B :=
-    fix format xs ce :=
+  Definition SizedList_format_body
+             (format : funType [list A; CacheFormat] (B * CacheFormat))
+    : funType [list A; CacheFormat] (B * CacheFormat) :=
+    fun xs ce =>
       match xs with
       | nil => ret (mempty, ce)
       | x :: xs' =>
@@ -41,120 +45,55 @@ Section SizedList.
           `(b2, ce2) <- format xs' ce1;
           ret (mappend b1 b2, ce2)
       end%comp.
+  Arguments SizedList_format_body /.
 
-  Definition SizedList_decode : nat -> DecodeM (list A) B.
+  Definition SizedList_format : FormatM (list A) B :=
+    LeastFixedPoint SizedList_format_body.
+
+  Definition SizedList_decode_body
+             (decode : nat -> DecodeM (list A) B)
+    : nat -> DecodeM (list A) B :=
+    fun sz b cd =>
+      match sz with
+      | O => Some (nil, b, cd)
+      | _ =>
+        `(x, b1, cd1) <- A_decode b cd;
+          if lt_dec sz (bin_measure b - bin_measure b1) then
+            None
+          else
+            `(xs, b2, cd2) <- decode (sz - (bin_measure b - bin_measure b1)) b1 cd1;
+          Some (x :: xs, b2, cd2)
+      end.
+  Arguments SizedList_decode_body /.
+
+  Definition SizedList_decode : nat -> DecodeM (list A) B :=
+    FueledFixP SizedList_decode_body.
+
+  Lemma SizedList_format_body_monotone:
+    monotonic_function SizedList_format_body.
   Proof.
-    refine
-      (Fix lt_wf _
-           (fun sz decode b cd =>
-              match sz with
-              | O => Some (nil, b, cd)
-              | _ =>
-                `(x, b1, cd1) <- Decode_w_Measure_lt A_decode b cd A_decode_lt;
-                if lt_dec sz (bin_measure b - bin_measure (proj1_sig b1)) then
-                  None
-                else
-                  `(xs, b2, cd2) <- decode (sz - (bin_measure b - bin_measure (proj1_sig b1))) _ (proj1_sig b1) cd1;
-                Some (x :: xs, b2, cd2)
-              end)).
-    abstract (destruct b1; unfold lt_B in *; simpl in *; omega).
-  Defined.
-
-  Definition Decode_w_Measure_lt_wf
-             (b : B)
-             (pf : lt_B b Wf_bound)
-             (cd : CacheDecode)
-    : option (A * {b' : B | lt_B b' b} * CacheDecode).
-    generalize (Wf_decode_lt b pf cd); clear.
-    destruct (Wf_decode b pf cd) as [ [ [ a b' ] cd' ] | ]; intros;
-      [ refine (Some (a, exist _ b' (H _ _ _ eq_refl), cd'))
-      | exact None ].
-  Defined.
-
-  Lemma Decode_w_Measure_lt_eq_wf
-        (b : B)
-        (pf : lt_B b Wf_bound)
-        (cd : CacheDecode)
-    : forall a' b' cd',
-      Wf_decode b pf cd = Some (a', b', cd')
-      -> exists pf',
-        Decode_w_Measure_lt_wf b pf cd =
-        Some (a', exist _ b' pf', cd').
-  Proof.
-    clear; intros; unfold Decode_w_Measure_lt_wf.
-    remember (Wf_decode_lt b pf cd); clear Heql.
-    destruct (Wf_decode b pf cd) as [ [ [? ?] ? ] | ].
-    injections; eauto.
-    discriminate.
+    unfold monotonic_function. simpl. intros.
+    destruct t. reflexivity.
+    apply SetoidMorphisms.refine_bind. reflexivity.
+    intro.
+    apply SetoidMorphisms.refine_bind. apply H.
+    intro. reflexivity.
   Qed.
-
-  Lemma Decode_w_Measure_lt_eq_inv_wf
-        (b : B)
-        (pf : lt_B b Wf_bound)
-        (cd : CacheDecode)
-    : forall (a' : A) (cd' : CacheDecode)
-        pf',
-      Decode_w_Measure_lt_wf b pf cd = Some (a', pf', cd')
-      -> Wf_decode b pf cd = Some (a', `pf' , cd').
-  Proof.
-    unfold Decode_w_Measure_lt_wf; intros.
-    revert pf' H.
-    generalize (Wf_decode_lt b pf cd).
-    destruct (Wf_decode b pf cd) as [ [ [? ?] ?] | ]; simpl; intros;
-      try discriminate.
-    injections; reflexivity.
-  Qed.
-
-  Definition SizedListWf_decode : nat -> forall b, lt_B b Wf_bound -> CacheDecode -> option (list A * B * CacheDecode).
-  Proof.
-    refine
-      (Fix lt_wf _
-           (fun sz decode b pf cd =>
-              match sz with
-              | O => Some (nil, b, cd)
-              | _ =>
-                `(x, b1, cd1) <- Decode_w_Measure_lt_wf b _ cd;
-                if lt_dec sz (bin_measure b - bin_measure (proj1_sig b1)) then
-                  None
-                else
-                  `(xs, b2, cd2) <- decode (sz - (bin_measure b - bin_measure (proj1_sig b1))) _ (proj1_sig b1) _ cd1;
-                Some (x :: xs, b2, cd2)
-              end)).
-    abstract assumption.
-    abstract (destruct b1; unfold lt_B in *; simpl in *; omega).
-    abstract (destruct b1; unfold lt_B in *; simpl in *; omega).
-  Defined.
 
   Theorem SizedList_decode_le
     : forall sz b cd xs b' cd',
       SizedList_decode sz b cd = Some (xs, b', cd') -> le_B b' b.
   Proof.
     unfold SizedList_decode.
-    induction sz using (well_founded_ind lt_wf); intros.
-    rewrite Coq.Init.Wf.Fix_eq in H0 by solve_extensionality.
+    unfold FueledFixP. intros ? ?. generalize (S (bin_measure b)). intro. revert sz b.
+    induction n; intros. easy.
+    simpl in H.
     destruct sz. injections. unfold le_B. easy.
     decode_opt_to_inv. destruct lt_dec. easy.
-    decode_opt_to_inv. subst. destruct x0.
-    remember (S sz) as sz'.
+    decode_opt_to_inv. subst. apply IHn in H0.
+    apply A_decode_lt in H.
     unfold lt_B, le_B in *.
-    apply H in H1; clear H;
-      simpl in *; omega.
-  Qed.
-
-  Theorem SizedListWf_decode_le
-    : forall sz b pf cd xs b' cd',
-      SizedListWf_decode sz b pf cd = Some (xs, b', cd') -> le_B b' b.
-  Proof.
-    unfold SizedListWf_decode.
-    induction sz using (well_founded_ind lt_wf); intros.
-    rewrite Coq.Init.Wf.Fix_eq in H0 by solve_extensionality.
-    destruct sz. injections. unfold le_B. easy.
-    decode_opt_to_inv. destruct lt_dec. easy.
-    decode_opt_to_inv. subst. destruct x0.
-    remember (S sz) as sz'.
-    unfold lt_B, le_B in *.
-    apply H in H1; clear H;
-      simpl in *; omega.
+    omega.
   Qed.
 
   Theorem SizedList_format_sz_eq
@@ -163,9 +102,12 @@ Section SizedList.
       SizedList_format xs ce2 ↝ (b2, ce2') ->
       bin_measure b1 = bin_measure b2.
   Proof.
-    unfold SizedList_format. induction xs; intros.
+    unfold SizedList_format.
+    induction xs; intros;
+      apply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H;
+      apply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H0.
     - inversion H. inversion H0. auto.
-    - computes_to_inv2.
+    - simpl in H, H0. computes_to_inv2.
       rewrite !mappend_measure.
       erewrite A_format_sz_eq; eauto.
   Qed.
@@ -175,7 +117,9 @@ Section SizedList.
       SizedList_format xs ce ↝ (b, ce') ->
       bin_measure b mod 8 = 0.
   Proof.
-    induction xs; intros.
+    unfold SizedList_format.
+    induction xs; intros;
+      apply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H.
     - inversion H. rewrite mempty_measure_0. auto.
     - simpl in H. computes_to_inv2. rewrite mappend_measure.
       rewrite <- Nat.add_mod_idemp_r; auto.
@@ -194,224 +138,102 @@ Section SizedList.
       /\ SizedList_predicate_rest xs' b
     end.
 
+  Definition SizedList_predicate sz xs : Prop :=
+    (forall b ce ce', SizedList_format xs ce ↝ (b, ce') -> bin_measure b = sz) /\
+    forall x, In x xs -> A_predicate x.
+
+  Local Arguments Nat.add : simpl never.
+  Local Arguments Nat.sub : simpl never.
   Theorem SizedList_decode_correct
     : forall sz,
       CorrectDecoder
         monoid
-        (fun xs =>
-           (forall b ce ce', SizedList_format xs ce ↝ (b, ce') -> bin_measure b = sz) /\
-           forall x, In x xs -> A_predicate x)
+        (SizedList_predicate sz)
         SizedList_predicate_rest
         SizedList_format (SizedList_decode sz) A_cache_inv.
   Proof.
-    unfold SizedList_format, SizedList_decode.
+    unfold SizedList_format, SizedList_decode, SizedList_format_body, SizedList_decode_body.
+    intros.
+    eapply fix_format_correctP2; eauto. apply SizedList_format_body_monotone.
+    unfold SizedList_predicate, SizedList_format, SizedList_format_body in *.
     split; intros. {
-      generalize dependent sz.
-      generalize dependent env.
-      generalize dependent env'.
-      generalize dependent xenv.
-      generalize dependent ext.
-      generalize dependent bin.
-      induction data; intros. {
-        eexists.
-        destruct H0 as [H3 H4]. specialize (H3 _ _ _ H2).
-        inversion H2. clear H2. subst.
-        repeat split; eauto.
-        rewrite Coq.Init.Wf.Fix_eq by solve_extensionality.
+      destruct data. {
+        destruct_many.
+        assert (bin_measure b = c). {
+          eapply H3.
+          eapply (unroll_LeastFixedPoint' SizedList_format_body_monotone).
+          simpl. eauto.
+        }
+        inversion H5; clear H5; subst.
         rewrite mempty_measure_0.
-        repeat progress f_equal. rewrite mempty_left. auto.
+        eexists. intuition eauto. repeat f_equal. apply mempty_left.
       } {
-        destruct H0 as [H3 H4]. specialize (H3 _ _ _ H2).
+        destruct_many. 
+        assert (bin_measure b = c). {
+          eapply H3.
+          eapply (unroll_LeastFixedPoint' SizedList_format_body_monotone).
+          simpl. eauto.
+        }
+        clear H3.
         computes_to_inv2.
-        destruct A_decode_correct as [He _].
-        simpl in H1. destruct H1. specialize (H0 _ _ _ H2').
-        edestruct He with (ext:=mappend b ext) as [? [? [? ?]]]; eauto.
-        apply H4. intuition.
-        rewrite mappend_measure.
-        edestruct IHdata with (ext:=ext) as [? [? [? ?]]]; intros; eauto.
-        split. intros. eapply SizedList_format_sz_eq; eauto.
-        intros. apply H4. intuition. clear IHdata.
-        eexists; intuition; eauto.
-        rewrite Coq.Init.Wf.Fix_eq by solve_extensionality; simpl.
-        match goal with
-        | _ : _ |- context [match ?a with _ => _ end] => destruct a eqn:?
-        end.
-        apply A_decode_lt in H3.
-        match goal with
-        | H : lt_B _ _ |- _ => unfold lt_B in H; repeat rewrite @mappend_measure in H; simpl in H
-        end; omega.
-        edestruct @Decode_w_Measure_lt_eq with (A_decode_lt:=A_decode_lt); eauto.
-        revert x1 H10. rewrite mappend_assoc. intros.
-        rewrite H10. simpl. clear x1 H10. destruct lt_dec.
-        rewrite !mappend_measure in l. omega.
+        rewrite mappend_measure in H1.
+        pose proof H5. apply A_format_some in H3.
+        assert (0 < bin_measure (mappend b1 b0)). {
+          rewrite mappend_measure. omega.
+        }
+        destruct (bin_measure (mappend b1 b0)) eqn:?. easy.
+        pose proof H5. eapply A_decode_correct in H5; eauto.
+        destruct_many. rewrite <- mappend_assoc. rewrite H5.
+        simpl. rewrite <- Heqn0 in *.
+        destruct lt_dec.
+        exfalso. rewrite !mappend_measure in l. omega.
         rewrite !mappend_measure.
         match goal with
-        | _ : _ |- context [Fix _ _ _ ?a _ _] => 
-          replace a with (bin_measure b)
-        end. simpl in H7. rewrite H7. auto.
-        match goal with
-        | _ : _ |- context [match ?a with _ => _ end] =>
+        | _ : _ |- context [decode ?a _ _] =>
           replace a with (bin_measure b0) by omega
         end.
-        destruct (bin_measure b0) eqn:Heq; simpl in *; omega.
+        eapply H0 in H5'; eauto. destruct_many.
+        rewrite H11. simpl. eexists. intuition.
+        omega.
+        split. intros. eapply SizedList_format_sz_eq; eauto.
+        intros. apply H6. intuition. apply H4. apply H6. intuition.
+        eapply H4. eauto.
       }
     } {
-      generalize dependent env.
-      generalize dependent env'.
-      generalize dependent xenv'.
-      generalize dependent data.
-      generalize dependent ext.
-      generalize dependent bin.
-      induction sz using (well_founded_ind lt_wf); intros.
-      rewrite Coq.Init.Wf.Fix_eq in H1 by solve_extensionality.
-      destruct sz. {
-        inversion H1. clear H1. subst. split; auto.
+      destruct c. {
+        injections. split; auto.
         exists mempty, env. repeat split; intros; auto.
         - symmetry. apply mempty_left.
-        - inversion H1. apply mempty_measure_0.
-        - inversion H1.
+        - eapply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H4.
+          inversion H4. apply mempty_measure_0.
+        - inversion H4.
       } {
         decode_opt_to_inv.
-        destruct x0. simpl proj1_sig in H3. simpl proj2_sig in H3.
-        apply Decode_w_Measure_lt_eq_inv in H1. simpl in H1.
-        destruct A_decode_correct as [_ Hd]; auto.
-        edestruct Hd as [? [? [? [? [? [? ?]]]]]]; eauto. clear Hd.
+        eapply A_decode_correct in H4; eauto. destruct_many.
         destruct lt_dec; try congruence.
         decode_opt_to_inv. subst.
-        edestruct H; try apply H3; eauto. unfold lt_B in l. omega.
-        destruct H9 as [? [? [? [? [[? ?] ?]]]]].
-        split; eauto. eexists _, _. repeat split.
+        eapply H0 in H5; eauto. destruct_many.
+        split; eauto. eexists _, _. repeat split; eauto.
         - computes_to_econstructor; eauto.
           computes_to_econstructor; eauto.
         - simpl. rewrite <- mappend_assoc. subst. auto.
-        - intros. computes_to_inv2.
+        - intros. eapply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H14.
+          simpl in H14. computes_to_inv2.
           specialize (H11 _ _ _ H14'). rewrite !mappend_measure in *.
           assert (bin_measure b1 = bin_measure x2). {
             eapply A_format_sz_eq; eauto.
           } omega.
         - destruct 1; subst; auto.
-        - auto.
+        - rewrite mappend_measure in H1.
+          apply A_format_some in H6. omega.
       }
     }
-  Qed.
 
-  Theorem SizedListWf_decode_correct
-    : forall sz,
-      CorrectDecoderWf
-        monoid
-        (fun xs =>
-           (forall b ce ce', SizedList_format xs ce ↝ (b, ce') -> bin_measure b = sz) /\
-           forall x, In x xs -> A_predicate x)
-        SizedList_predicate_rest
-        SizedList_format (SizedListWf_decode sz) A_cache_inv.
-  Proof.
-    unfold SizedList_format, SizedListWf_decode.
-    split; intros. {
-      generalize dependent sz.
-      generalize dependent env.
-      generalize dependent env'.
-      generalize dependent xenv.
-      generalize dependent ext.
-      generalize dependent bin.
-      induction data; intros. {
-        eexists.
-        destruct H0 as [H3 H4]. specialize (H3 _ _ _ H2).
-        inversion H2. clear H2. subst.
-        repeat split; eauto.
-        rewrite Coq.Init.Wf.Fix_eq by solve_extensionality.
-        rewrite mempty_measure_0.
-        repeat progress f_equal. rewrite mempty_left. auto.
-      } {
-        destruct H0 as [H3 H4]. specialize (H3 _ _ _ H2).
-        computes_to_inv2. revert pf. rewrite <- mappend_assoc. intros.
-        assert (lt_B (mappend b ext) Wf_bound) as pf'. {
-          unfold lt_B in *. rewrite !mappend_measure in pf. rewrite mappend_measure. omega.
-        }
-        destruct Wf_decode_correct as [He _].
-        simpl in H1. destruct H1. specialize (H0 _ _ _ H2').
-        edestruct He with (ext:=mappend b ext) (pf := pf); eauto.
-        apply H4. intuition. destruct_many.
-        rewrite mappend_measure.
-        edestruct IHdata with (ext:=ext) (pf:=pf'); intros; eauto.
-        split. intros. eapply SizedList_format_sz_eq; eauto.
-        intros. apply H4. intuition. clear IHdata.
-        eexists; intuition; eauto.
-        rewrite Coq.Init.Wf.Fix_eq by solve_extensionality; simpl.
-        match goal with
-        | _ : _ |- context [match ?a with _ => _ end] => destruct a eqn:?
-        end.
-        apply Wf_decode_lt in H3.
-        unfold lt_B in *.
-        repeat match goal with
-               | H : context [bin_measure (mappend _ _)] |- _ => rewrite !mappend_measure in H
-               end; omega.
-        edestruct @Decode_w_Measure_lt_eq_wf; eauto.
-        simpl in *.
-        match goal with
-        | |- context [Decode_w_Measure_lt_wf _ ?a _] => replace a with pf in * by apply le_uniqueness_proof
-        end. rewrite H9. simpl. clear H9. destruct lt_dec.
-        repeat match goal with
-               | H : context [bin_measure (mappend _ _)] |- _ => rewrite !mappend_measure in H
-               end; omega.
-        match goal with
-        | _ : _ |- context [Fix _ _ _ ?a _ _ _] =>
-          replace a with (bin_measure b)
-        end. simpl in H8.
-        match goal with
-        | H : context [Fix _ _ _ _ _ ?p _]
-          |- context [Fix _ _ _ _ _ ?p' _] =>
-          replace p' with p by apply le_uniqueness_proof
-        end.
-        rewrite H8. auto.
-        unfold lt_B in *. rewrite !mappend_measure in *.
-        match goal with
-        | _ : _ |- context [match ?a with _ => _ end] =>
-          replace a with (bin_measure b0) by omega
-        end.
-        destruct (bin_measure b0) eqn:Heq; simpl in *; omega.
-      }
-    } {
-      generalize dependent env.
-      generalize dependent env'.
-      generalize dependent xenv'.
-      generalize dependent data.
-      generalize dependent ext.
-      generalize dependent bin.
-      induction sz using (well_founded_ind lt_wf); intros.
-      rewrite Coq.Init.Wf.Fix_eq in H1 by solve_extensionality.
-      destruct sz. {
-        inversion H1. clear H1. subst. split; auto.
-        exists mempty, env. repeat split; intros; auto.
-        - symmetry. apply mempty_left.
-        - inversion H1. apply mempty_measure_0.
-        - inversion H1.
-      } {
-        decode_opt_to_inv.
-        destruct x0. simpl proj1_sig in H3. simpl proj2_sig in H3.
-        apply Decode_w_Measure_lt_eq_inv_wf in H1. simpl in H1.
-        destruct Wf_decode_correct as [_ Hd]; auto.
-        edestruct Hd; eauto. clear Hd. destruct_many.
-        destruct lt_dec; try congruence.
-        decode_opt_to_inv. subst.
-        edestruct H; try apply H3; eauto. unfold lt_B in l. omega.
-        destruct_many.
-        split; eauto. eexists _, _. repeat split.
-        - computes_to_econstructor; eauto.
-          computes_to_econstructor; eauto.
-        - simpl. rewrite <- mappend_assoc. subst. auto.
-        - intros. computes_to_inv2.
-          specialize (H11 _ _ _ H14').
-          clear H3.
-          repeat match goal with
-                 | H : context [bin_measure (mappend _ _)] |- _ => rewrite !mappend_measure in H
-                 end. rewrite !mappend_measure.
-          assert (bin_measure b1 = bin_measure x2). {
-            eapply A_format_sz_eq; eauto.
-          } omega.
-        - destruct 1; subst; auto.
-        - auto.
-      }
-    }
+    intros. destruct c; eauto.
+    decode_opt_to_inv. rewrite H0. simpl.
+    destruct lt_dec; eauto.
+    decode_opt_to_inv. erewrite H; eauto.
+    simpl. auto.
   Qed.
 
 End SizedList.
