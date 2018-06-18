@@ -108,7 +108,7 @@ Section Varint.
   Context {monoid : Monoid B}.
   Context {monoidUnit : QueueMonoidOpt monoid bool}.
 
-  Definition Varint_body
+  Definition Varint_format_body
              (format : funType [N : Type; CacheFormat] (B * CacheFormat))
     : funType [N : Type; CacheFormat] (B * CacheFormat) :=
     fun n ce =>
@@ -121,30 +121,34 @@ Section Varint.
           `(b2, ce2) <- format q ce1;
           ret (mappend b1 b2, ce2)
       end.
-  Arguments Varint_body /.
+  Arguments Varint_format_body /.
 
   Definition Varint_format : FormatM N B :=
     LeastFixedPoint (fDom := [N : Type; CacheFormat])
-                    Varint_body.
+                    Varint_format_body.
+
+  Definition Varint_decode_body
+             (decode : DecodeM N B)
+    : DecodeM N B :=
+    fun b cd =>
+      `(w, b1, cd1) <- decode_word (sz := 8) b cd;
+        let r' := wordToN w in
+        if r' <? (2^7) then
+          Some (r', b1, cd1)
+        else
+          let r := r' - (2^7) in
+          `(q, b2, cd2) <- decode b1 cd1;
+            match q with
+            | N0 => None
+            | _ => Some ((2^7) * q + r, b2, cd2)
+            end.
+  Arguments Varint_decode_body /.
 
   Definition Varint_decode : DecodeM N B :=
-    Fix well_founded_lt_b _
-        (fun b decode cd =>
-           `(w, b1, cd1) <- Decode_w_Measure_lt
-                             (decode_word (sz := 8)) b cd decode_word_lt;
-             let r' := wordToN w in
-             if r' <? (2^7) then
-               Some (r', (proj1_sig b1), cd1)
-             else
-               let r := r' - (2^7) in
-               `(q, b2, cd2) <- decode (proj1_sig b1) (proj2_sig b1) cd1;
-                 match q with
-                 | N0 => None
-                 | _ => Some ((2^7) * q + r, b2, cd2)
-                 end).
+    FueledFix Varint_decode_body.
 
-  Lemma Varint_body_monotone:
-    monotonic_function Varint_body.
+  Lemma Varint_format_body_monotone:
+    monotonic_function Varint_format_body.
   Proof.
     unfold monotonic_function. simpl. intros.
     destruct N.div_eucl as [q r] eqn:Hdiv.
@@ -161,60 +165,56 @@ Section Varint.
   Theorem Varint_decode_correct
           {P : CacheDecode -> Prop}
           (P_OK : cache_inv_Property P (fun P => forall b cd, P cd -> P (addD cd b)))
-    : CorrectDecoder monoid
+    : forall b, CorrectDecoder' monoid
                      (fun _ => True)
                      (fun _ _ => True)
-                     Varint_format Varint_decode P.
+                     Varint_format Varint_decode P b.
   Proof.
-    unfold Varint_format, Varint_decode, Varint_body.
-    eapply fix_format_correct; eauto. apply Varint_body_monotone.
-    intros _.
+    unfold Varint_format, Varint_decode, Varint_format_body, Varint_decode_body.
+    eapply fix_format_correct; eauto. apply Varint_format_body_monotone.
+    intros _. intros.
     split; intros. {
-      simpl. intros.
       clear H2 H3.
-      destruct (Word_decode_correct (sz := 8) (P := P)) as [He _]; eauto.
       destruct N.div_eucl as [q r] eqn:Hdiv.
       destruct q. {
-        edestruct He as [? [? [? ?]]]; eauto.
+        eapply (Word_decode_correct (sz := 8) (P := P)) in H4; eauto.
+        destruct_many.
         eexists. repeat split; eauto.
-        edestruct @Decode_w_Measure_lt_eq
-          with (A_decode := (decode_word (sz := 8))); eauto.
-        rewrite H5. simpl.
+        rewrite H2. simpl.
         rewrite wordToN_NToWord_idempotent by eauto.
         rewrite (proj2 (N.ltb_lt _ _))
           by (eapply div_eucl_mod_lt; [easy | eauto]).
         repeat progress f_equal.
         pose proof (N.div_eucl_spec data (2^7)).
-        rewrite Hdiv in H6. rewrite H6. auto.
+        rewrite Hdiv in H5. rewrite H5. auto.
       } {
         computes_to_inv2.
-        edestruct He as [? [? [? ?]]]; eauto.
-        simpl in H'. edestruct H' as [? [? [? ?]]]; eauto. simpl fst in *; simpl snd in *.
+        pose proof H4.
+        eapply (Word_decode_correct (sz := 8) (P := P)) in H4; eauto.
+        destruct_many.
+        edestruct H as [[? [? [? ?]]] _]; eauto.
+        rewrite mappend_measure in H0. 
+        apply format_word_some in H2; omega.
         eexists. repeat split; eauto.
-        edestruct @Decode_w_Measure_lt_eq
-          with (A_decode := (decode_word (sz := 8))); eauto.
-        rewrite <- mappend_assoc.
-        rewrite H8. simpl.
+        rewrite <- mappend_assoc. rewrite H3. simpl.
         rewrite wordToN_NToWord_idempotent
           by (eapply div_eucl_mod_lt_sz_add with (sz := 7%nat); eauto).
         rewrite (proj2 (N.ltb_ge _ _))
           by (rewrite N.add_comm; apply N.le_add_r).
-        rewrite H5. simpl.
+        rewrite H6. simpl.
         repeat progress f_equal.
         pose proof (N.div_eucl_spec data (2^7)).
         rewrite Hdiv in H9. rewrite H9.
         rewrite N.add_sub. reflexivity.
       }
     } {
-      destruct (Word_decode_correct (sz := 8) (P := P)) as [_ Hd]; eauto.
-      simpl in H. simpl. intros.
-      decode_opt_to_inv. destruct x0.
-      apply Decode_w_Measure_lt_eq_inv in H2. simpl in H2.
-      edestruct Hd as [? [? [? [? [? [? ?]]]]]]; eauto.
+      decode_opt_to_inv.
+      eapply (Word_decode_correct (sz := 8) (P := P)) in H3; eauto.
+      destruct_many.
       destruct N.ltb eqn:Hlt. {
-        inversion H3. clear H3. subst. split; eauto.
+        injections. split; eauto.
         eexists _, _. repeat split; eauto.
-        simpl. destruct N.div_eucl as [q r] eqn:Hdiv.
+        destruct N.div_eucl as [q r] eqn:Hdiv.
         assert (q = 0) as L1. {
           apply div_eucl_div in Hdiv. subst.
           apply N.div_small.
@@ -225,13 +225,14 @@ Section Varint.
           apply N.mod_small.
           apply N.ltb_lt. auto.
         }
-        subst. rewrite NToWord_wordToN. assumption.
+        subst. rewrite NToWord_wordToN. eauto.
       } {
-        simpl proj1_sig in H3. 
         decode_opt_to_inv.
         destruct x4. easy.
-        inversion H9. clear H9. subst.
-        edestruct H as [? [? [? [? [? [? ?]]]]]]; eauto.
+        injections.
+        edestruct H as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
+        rewrite mappend_measure in H0. 
+        apply format_word_some in H5; omega.
         subst. split; eauto.
         eexists _, _. repeat split; eauto.
         destruct N.div_eucl as [q r] eqn:Hdiv.
@@ -259,6 +260,11 @@ Section Varint.
         simpl. apply mappend_assoc.
       }
     }
+
+    intros.
+    decode_opt_to_inv. rewrite H0. simpl.
+    destruct N.ltb; eauto.
+    decode_opt_to_inv. erewrite H; eauto.
   Qed.
 
   Lemma Varint_decode_lt
@@ -266,21 +272,19 @@ Section Varint.
         (b' : B) (cd' : CacheDecode),
       Varint_decode b cd = Some (a, b', cd') -> lt_B b' b.
   Proof.
-    unfold Varint_decode. intros.
-    generalize dependent cd.
-    generalize dependent cd'.
-    generalize dependent a.
-    induction b using (well_founded_ind well_founded_lt_b); intros.
-    rewrite Coq.Init.Wf.Fix_eq in H0 by solve_extensionality.
-    decode_opt_to_inv. destruct x1.
-    apply Decode_w_Measure_lt_eq_inv in H0. simpl in H0.
+    unfold Varint_decode, Varint_decode_body.
+    unfold FueledFix. intro. generalize (S (bin_measure b)). intro. revert b.
+    induction n; intros. easy.
+    simpl in H.
+    decode_opt_to_inv.
+    apply decode_word_lt in H.
     destruct N.ltb. {
-      inversion H1. subst. auto.
+      injections. auto.
     } {
-      decode_opt_to_inv. destruct x3; try easy.
-      inversion H2. clear H2. subst.
-      unfold lt_B in *. eapply lt_trans.
-      eapply (H x1); eauto. eauto.
+      decode_opt_to_inv.
+      destruct x2. easy. injections.
+      apply IHn in H0.
+      unfold lt_B in *. omega.
     }
   Qed.
 
@@ -313,9 +317,9 @@ Section Varint.
   Proof.
     unfold Varint_format. simpl.
     induction d using (well_founded_ind N.lt_wf_0); intros.
-    apply (unroll_LeastFixedPoint Varint_body_monotone) in H0.
-    apply (unroll_LeastFixedPoint Varint_body_monotone) in H1.
-    unfold Varint_body in *.
+    apply (unroll_LeastFixedPoint Varint_format_body_monotone) in H0.
+    apply (unroll_LeastFixedPoint Varint_format_body_monotone) in H1.
+    unfold Varint_format_body in *.
     destruct N.div_eucl eqn:Hdiv. destruct n. {
       eapply word_format_eq; eauto.
     } {
@@ -371,8 +375,8 @@ Theorem Varint_format_byte
     bin_measure b mod 8 = 0.
 Proof.
   induction d using (well_founded_ind N.lt_wf_0); intros.
-  apply (unroll_LeastFixedPoint Varint_body_monotone) in H0.
-  unfold Varint_body in *.
+  apply (unroll_LeastFixedPoint Varint_format_body_monotone) in H0.
+  unfold Varint_format_body in *.
   destruct N.div_eucl eqn:Hdiv. destruct n. {
     eapply word_format_byte; eauto; try easy.
   } {
