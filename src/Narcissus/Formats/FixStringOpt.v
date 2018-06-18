@@ -54,10 +54,10 @@ Section String.
         format_string (decode_string sz) P.
   Proof.
     split.
-    { intros env env' xenv l l' ext ? Eeq Ppred Ppred_rest Penc.
+    { intros env env' xenv l ext ? Eeq Ppred Ppred_rest Penc.
       subst.
       generalize dependent env.
-      revert env' xenv l' env_OK.
+      revert env' xenv bin env_OK.
       induction l.
       { intros.
         inversion Penc; subst; clear Penc.
@@ -69,13 +69,13 @@ Section String.
         unfold Bind2 in *; computes_to_inv; subst.
         injection Penc''; intros; subst.
         destruct v; destruct v0.
-        destruct (proj1 (Ascii_decode_correct P_OK) _ _ _ _ _ (mappend b0 ext) env_OK Eeq I I Penc) as [? [? [? xenv_OK] ] ].
+        destruct (proj1 (Ascii_decode_correct P_OK _) _ _ _ _ (mappend b0 ext) env_OK Eeq I I Penc) as [? [? [? xenv_OK] ] ].
       simpl. rewrite <- mappend_assoc, H; simpl.
       destruct (IHl _ _ _ xenv_OK _ H0 Penc') as [? [? ?] ].
       rewrite H1; simpl; eexists; eauto.
       }
     }
-    { induction sz; simpl; intros.
+    { revert bin. induction sz; simpl; intros.
       { injections; repeat eexists; eauto using mempty_left.
         apply add_correct; eauto.
       }
@@ -83,7 +83,7 @@ Section String.
           simpl in *; try discriminate.
         destruct (decode_string sz b c) as [ [ [? ?] ?] | ] eqn: ? ;
           simpl in *; try discriminate; injections.
-        eapply (proj2 (Ascii_decode_correct P_OK)) in Heqo; eauto;
+        eapply (proj2 (Ascii_decode_correct P_OK _)) in Heqo; eauto;
           destruct Heqo; destruct_ex; intuition; subst;
             eapply IHsz in Heqo0; eauto; destruct Heqo0;
               destruct_ex; intuition; subst.

@@ -187,7 +187,7 @@ Section Word.
                               format_word decode_word P.
   Proof.
     unfold CorrectDecoder, format_word, decode_word; split.
-    - intros env env' xenv w w' ext env_OK Eeq _ _ Penc.
+    - intros env env' xenv w ext env_OK Eeq _ _ Penc.
       computes_to_inv; injections.
       generalize dependent sz.
       intros; rewrite decode_encode_word'; simpl.
@@ -319,7 +319,7 @@ Section Word.
                               (format_unused_word' sz' mempty) (decode_unused_word sz') P.
   Proof.
     unfold CorrectDecoder, format_unused_word', decode_unused_word; split.
-    - intros env env' xenv w w' ext env_OK Eeq _ _ Penc.
+    - intros env env' xenv w ext env_OK Eeq _ _ Penc.
       computes_to_inv; injections.
       unfold decode_unused_word'.
       rewrite monoid_dequeue_encode_word'; simpl.

@@ -101,7 +101,7 @@ Section SumType.
       revert types formatrs decoders invariants invariants_rest formatrs_decoders_correct;
       unfold CorrectDecoder, format_SumType, decode_SumType.
     { intros; intuition.
-      eapply (proj1 (formatrs_decoders_correct _ (H _))) in H2; eauto;
+      eapply (proj1 (formatrs_decoders_correct _ (H _) _)) in H2; eauto;
         destruct_ex; intuition.
       subst; setoid_rewrite H2; simpl.
       eexists; intuition eauto.
@@ -111,7 +111,7 @@ Section SumType.
     { intros.
       destruct (ith decoders idx bin env') as [ [ [? ?] ? ] | ] eqn : ? ;
         simpl in *; try discriminate; injections.
-      eapply (proj2 (formatrs_decoders_correct idx (H _))) in Heqo;
+      eapply (proj2 (formatrs_decoders_correct idx (H _) _)) in Heqo;
         eauto; destruct Heqo as [? [? ?] ]; destruct_ex; intuition; subst.
       exists x; exists x0; intuition;
         try rewrite index_SumType_inj_inverse; eauto.

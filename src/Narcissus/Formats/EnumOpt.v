@@ -112,8 +112,8 @@ Section Enum.
     : CorrectDecoder monoid (fun _ => True) (fun _ _ => True) format_enum decode_enum P.
   Proof.
     split; unfold format_enum, decode_enum.
-    { intros env env' xenv c c' ext ? Eeq Ppred Ppred_rest Penc.
-      destruct (proj1 (Word_decode_correct P_OK) _ _ _ _ _ ext env_OK Eeq I I Penc) as [? [? ?] ].
+    { intros env env' xenv c ext ? Eeq Ppred Ppred_rest Penc.
+      destruct (proj1 (Word_decode_correct P_OK _) _ _ _ _ ext env_OK Eeq I I Penc) as [? [? ?] ].
       rewrite H; simpl.
       apply (word_indexed_correct _ c) in tb_OK.
       subst; simpl in *.
@@ -130,7 +130,7 @@ Section Enum.
           simpl in *; try discriminate.
       destruct (word_indexed w tb) eqn: ? ;
         simpl in *; try discriminate; injections.
-      eapply (proj2 (Word_decode_correct P_OK)) in Heqo; eauto;
+      eapply (proj2 (Word_decode_correct P_OK _)) in Heqo; eauto;
         destruct Heqo; destruct_ex; intuition; subst.
       simpl.
       unfold format_word in *; computes_to_inv; injections.

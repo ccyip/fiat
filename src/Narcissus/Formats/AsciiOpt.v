@@ -38,8 +38,8 @@ Section Ascii.
   Proof.
     unfold decode_ascii; split.
     {
-      intros env env' xenv c c' ext env_OK Eeq Ppred Ppred_rest Penc.
-      destruct (proj1 (Word_decode_correct (sz := 8) P_OK) _ _ _ _ _ ext env_OK Eeq I I Penc) as [? [? [? xenv_OK] ] ].
+      intros env env' xenv c ext env_OK Eeq Ppred Ppred_rest Penc.
+      destruct (proj1 (Word_decode_correct (sz := 8) P_OK _) _ _ _ _ ext env_OK Eeq I I Penc) as [? [? [? xenv_OK] ] ].
       rewrite H; simpl.
       eexists; intuition eauto.
       repeat f_equal.
@@ -61,11 +61,11 @@ Section Ascii.
       subst. rewrite <- plus_n_O in H1. rewrite H1. clear H1.
       rewrite Nnat.N2Nat.id. rewrite ascii_N_embedding. eauto.
     }
-    { intros env xenv xenv' n n' ext Eeq OK_env' Penc.
-      destruct (decode_word n' xenv) as [ [ [? ? ] ? ] | ] eqn: ? ;
+    { intros env xenv xenv' n ext Eeq OK_env' Penc.
+      destruct (decode_word bin xenv) as [ [ [? ? ] ? ] | ] eqn: ? ;
         simpl in *; try discriminate.
       injections.
-      eapply (proj2 (Word_decode_correct P_OK)) in Heqo; eauto;
+      eapply (proj2 (Word_decode_correct P_OK _)) in Heqo; eauto;
         destruct Heqo as [? [? ?] ]; destruct_ex; intuition; subst; eauto.
       unfold format_word in *; computes_to_inv; injections.
       repeat eexists; eauto.

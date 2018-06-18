@@ -120,22 +120,22 @@ Lemma compose_format_correct
            decode2 proj rest env') P.
 Proof.
   unfold cache_inv_Property in *; split.
-  { intros env env' xenv data bin ext ? env_pm pred_pm pred_pm_rest com_pf.
+  { intros env env' xenv data ext ? env_pm pred_pm pred_pm_rest com_pf.
     unfold compose, Bind2 in com_pf; computes_to_inv; destruct v;
       destruct v0.
-    destruct (fun H' => proj1 (decode1_pf (proj1 P_inv_pf)) _ _ _ _ _ (mappend b0 ext) env_OK env_pm (pred_pf _ pred_pm) H' com_pf); intuition; simpl in *; injections; eauto.
+    destruct (fun H' => proj1 (decode1_pf (proj1 P_inv_pf) _) _ _ _ _ (mappend b0 ext) env_OK env_pm (pred_pf _ pred_pm) H' com_pf); intuition; simpl in *; injections; eauto.
     setoid_rewrite <- mappend_assoc; rewrite H2.
     simpl.
-    destruct (fun H'' => proj1 (decode2_pf (project data) (pred_pf _ pred_pm) H1)
-                               _ _ _ _ _ ext H4 H (conj pred_pm (eq_refl _)) H'' com_pf');
+    destruct (fun H'' => proj1 (decode2_pf (project data) (pred_pf _ pred_pm) H1 _)
+                               _ _ _ _ ext H4 H (conj pred_pm (eq_refl _)) H'' com_pf');
       intuition; simpl in *; injections.
     eauto. }
   { intros.
     destruct (decode1 bin env') as [ [ [? ?] ? ] | ] eqn : ? ;
       simpl in *; try discriminate.
-    eapply (proj2 (decode1_pf (proj1 P_inv_pf))) in Heqo; eauto.
+    eapply (proj2 (decode1_pf (proj1 P_inv_pf) _)) in Heqo; eauto.
     destruct Heqo as [? [? [? [? [? [? ?] ] ] ] ] ].
-    eapply (proj2 (decode2_pf a H5 (proj2 P_inv_pf))) in H2; eauto.
+    eapply (proj2 (decode2_pf a H5 (proj2 P_inv_pf) _)) in H2; eauto.
     destruct H2 as [? ?]; destruct_ex; intuition; subst.
     eexists; eexists; repeat split.
     repeat computes_to_econstructor; eauto.
@@ -205,26 +205,26 @@ Lemma compose_format_correct_no_dep
            (if A_eq_dec a a' then decode2 rest env' else None)) P.
 Proof.
   unfold cache_inv_Property in *; split.
-  { intros env env' xenv data bin ext ? env_pm pred_pm pred_pm_rest com_pf.
+  { intros env env' xenv data ext ? env_pm pred_pm pred_pm_rest com_pf.
     unfold compose, Bind2 in com_pf; computes_to_inv; destruct v;
       destruct v0.
-    destruct (fun H => proj1 (decode1_pf (proj1 P_inv_pf)) _ _ _ _ _ (mappend b0 ext) env_OK env_pm predicate_a' H com_pf); intuition; simpl in *; injections.
+    destruct (fun H => proj1 (decode1_pf (proj1 P_inv_pf) _) _ _ _ _ (mappend b0 ext) env_OK env_pm predicate_a' H com_pf); intuition; simpl in *; injections.
     eapply predicate_rest_impl; eauto.
     setoid_rewrite <- mappend_assoc; rewrite H2.
     simpl.
     destruct (A_eq_dec a' a'); try congruence.
     subst.
-    destruct (fun H => proj1 H6 (*decode2_pf _ (conj (eq_refl _) predicate_a') H1*)
-                             _ _ _ _ _ ext H4 H pred_pm pred_pm_rest com_pf');
+    destruct (fun H => proj1 (H6 _) (*decode2_pf _ (conj (eq_refl _) predicate_a') H1*)
+                             _ _ _ _ ext H4 H pred_pm pred_pm_rest com_pf');
       intuition; simpl in *; injections.
     eauto. }
   { intros.
     destruct (decode1 bin env') as [ [ [? ?] ? ] | ] eqn : ? ;
       simpl in *; try discriminate;
         destruct (A_eq_dec a a'); try discriminate;
-          eapply (proj2 (decode1_pf (proj1 P_inv_pf))) in Heqo; eauto;
+          eapply (proj2 (decode1_pf (proj1 P_inv_pf) _)) in Heqo; eauto;
             destruct Heqo; destruct_ex; intuition; subst;
-              eapply (proj2 H11 (*decode2_pf a' (conj (eq_refl _) H7) H5)*)) in H1; eauto;
+              eapply (proj2 (H11 _) (*decode2_pf a' (conj (eq_refl _) H7) H5)*)) in H1; eauto;
                 destruct H1; destruct_ex; intuition; subst.
     eexists; eexists; repeat split.
     repeat computes_to_econstructor; eauto.

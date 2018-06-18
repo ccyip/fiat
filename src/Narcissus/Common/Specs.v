@@ -42,14 +42,15 @@ Section Specifications.
       decode (mappend bin ext) env' = (data', ext', xenv') ->
       Equiv xenv xenv' /\ data = data' /\ ext = ext'.
 
-  Definition CorrectDecoder
+  Definition CorrectDecoder'
              (monoid : Monoid B)
              (predicate : A -> Prop)
              (rest_predicate : A -> B -> Prop)
              (format : FormatM)
              (decode : DecodeM)
-             (decode_inv : CacheDecode -> Prop) :=
-    (forall env env' xenv data bin ext
+             (decode_inv : CacheDecode -> Prop)
+             (bin : B) :=
+    (forall env env' xenv data ext
             (env_OK : decode_inv env'),
         Equiv env env' ->
         predicate data ->
@@ -58,7 +59,7 @@ Section Specifications.
         exists xenv',
           decode (mappend bin ext) env' = Some (data, ext, xenv')
           /\ Equiv xenv xenv' /\ decode_inv xenv') /\
-    (forall env env' xenv' data bin ext,
+    (forall env env' xenv' data ext,
         Equiv env env'
         -> decode_inv env'
         -> decode bin env' = Some (data, ext, xenv')
@@ -68,6 +69,16 @@ Section Specifications.
             /\ bin = mappend bin' ext
             /\ predicate data
             /\ Equiv xenv xenv').
+  Global Arguments CorrectDecoder' /.
+
+  Definition CorrectDecoder
+             (monoid : Monoid B)
+             (predicate : A -> Prop)
+             (rest_predicate : A -> B -> Prop)
+             (format : FormatM)
+             (decode : DecodeM)
+             (decode_inv : CacheDecode -> Prop) :=
+    forall bin, CorrectDecoder' monoid predicate rest_predicate format decode decode_inv bin.
 
   (* Definition that identifies properties of cache invariants for automation. *)
   Definition cache_inv_Property
@@ -149,7 +160,7 @@ Section Specifications.
     destruct (rest_predicate_dec data); try (solve [intuition]).
     right.
     intros [? ?].
-    destruct ((proj1 H) env env' _ data _ _ H2 H0 p r H3); intuition.
+    destruct ((proj1 (H b)) env env' _ data _ H2 H0 p r H3); intuition.
     rewrite mempty_right in H5; congruence.
   Qed.
 
@@ -169,10 +180,10 @@ Section Specifications.
       ->
       CorrectDecoder monoid predicate rest_predicate  (fun a s b => (format a s ∋ b) /\ predicate a) decode decode_inv.
   Proof.
-    intros; destruct H; unfold CorrectDecoder; split; intros.
+    intros; unfold CorrectDecoder; split; intros; destruct (H bin).
     eapply H; eauto.
-    apply (proj1 H4).
-    destruct (H0 env env' xenv' data bin ext) as [? [? [? ?] ] ]; intuition eauto.
+    apply (proj1 H3).
+    destruct (H4 env env' xenv' data ext) as [? [? [? ?] ] ]; intuition eauto.
     eexists _, _; intuition eauto.
     unfold computes_to; eauto.
   Qed.
@@ -441,11 +452,11 @@ Add Parametric Morphism
     with signature (pointwise_relation _ (pointwise_relation _ refineEquiv) ==> impl)
       as format_decode_correct_refineEquiv.
 Proof.
-  unfold impl, pointwise_relation, CorrectDecoder;
-    intuition eauto; intros.
+  unfold impl, pointwise_relation, CorrectDecoder; simpl;
+  intros; specialize (H0 bin); intuition eauto.
   - eapply H1; eauto; apply H; eauto.
   - eapply H2; eauto.
-  - destruct (H2 _ _ _ _ _ _ H0 H3 H4) as [ ? [? [? ?] ] ];
+  - destruct (H2 _ _ _ _ _ H0 H3 H4) as [ ? [? [? ?] ] ];
       intuition.
     repeat eexists; intuition eauto; apply H; eauto.
 Qed.
@@ -664,11 +675,12 @@ Lemma Start_CorrectDecoderFor
   : @CorrectDecoderFor A B cache monoid Invariant FormatSpec.
 Proof.
   exists (decoder_opt, cache_inv); exists P_inv; split; simpl; eauto.
-  unfold CorrectDecoder in *; intuition; intros.
-  - destruct (H1 _ _ _ _ _ ext env_OK H0 H3 H4 H5).
+  unfold CorrectDecoder in *; simpl in *; intros;
+    specialize (decoder_OK H bin); intuition.
+  - destruct (H0 _ _ _ _ ext env_OK H2 H3 H4 H5).
     rewrite decoder_opt_OK in H6; eauto.
-  - rewrite <- decoder_opt_OK in H4; destruct (H2 _ _ _ _ _ _ H0 H3 H4); eauto.
-  - rewrite <- decoder_opt_OK in H4; destruct (H2 _ _ _ _ _ _ H0 H3 H4); eauto.
+  - rewrite <- decoder_opt_OK in H4; destruct (H1 _ _ _ _ _ H2 H3 H4); eauto.
+  - rewrite <- decoder_opt_OK in H4; destruct (H1 _ _ _ _ _ H2 H3 H4); eauto.
 Defined.
 
 (* Shorthand for nondeterministically decoding a value. *)
@@ -706,19 +718,18 @@ Proof.
   pose proof (proj2_sig (decoderImpl)).
   cbv beta in H1.
   destruct_ex; intuition.
-  destruct H1.
   intros v Comp_v; computes_to_inv; subst;
     apply PickComputes; intros.
   split; intros.
   - destruct (fst (proj1_sig decoderImpl) b cd) as [ [ [? ?] ?] | ] eqn: ?; try discriminate.
     injections.
-    eapply H2 in Heqo; eauto.
+    eapply H1 in Heqo; eauto.
     destruct Heqo as [? [? [? [? ?] ] ] ].
     intuition.
     subst.
     eexists _, _, _ ; split; eauto.
   - destruct_ex; intuition; subst.
-    eapply H1 in H5; eauto.
+    eapply H1 in H6; eauto.
     destruct_ex; intuition.
     rewrite H5; reflexivity.
 Qed.

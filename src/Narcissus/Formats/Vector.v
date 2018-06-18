@@ -101,10 +101,10 @@ Section Vector.
   Proof.
     split.
     {
-      intros env env' xenv l l' ext env_OK Eeq Ppred Ppred_rest Penc.
+      intros env env' xenv l ext env_OK Eeq Ppred Ppred_rest Penc.
       generalize dependent env. generalize dependent env'.
       generalize dependent xenv.
-      generalize dependent l'. induction l.
+      generalize dependent bin. induction l.
       { intros.
         simpl in *; intuition; computes_to_inv;
           injections; simpl; rewrite mempty_left; eauto.
@@ -114,7 +114,7 @@ Section Vector.
         unfold Bind2 in Penc; computes_to_inv; subst.
         destruct v; destruct v0; simpl in *.
         injections.
-        destruct (fun H' => proj1 A_decode_pf _ _ _ _ _ (mappend b0 ext) env_OK Eeq H H' Penc) as [ ? [? [? xenv_OK] ] ].
+        destruct (fun H' => proj1 (A_decode_pf _) _ _ _ _ (mappend b0 ext) env_OK Eeq H H' Penc) as [ ? [? [? xenv_OK] ] ].
         intuition; destruct_ex.
         eapply H0; eauto.
         setoid_rewrite <- mappend_assoc; setoid_rewrite H0;
@@ -124,7 +124,7 @@ Section Vector.
         eexists; intuition.
       }
     }
-    { induction sz; simpl; intros.
+    { revert bin. induction sz; simpl; intros.
       - injections; simpl; repeat eexists; intuition eauto.
         symmetry; apply mempty_left.
         inversion H1.
@@ -132,7 +132,7 @@ Section Vector.
           simpl in *; try discriminate.
         destruct (decode_Vector sz b c) as [ [ [? ?] ?] | ] eqn: ? ;
           simpl in *; try discriminate; injections.
-        eapply (proj2 A_decode_pf) in Heqo; eauto;
+        eapply (proj2 (A_decode_pf _)) in Heqo; eauto;
           destruct Heqo as [? [? ?] ]; destruct_ex; intuition; subst;
             eapply IHsz in Heqo0; eauto; destruct Heqo0 as [? [? ?] ];
               destruct_ex; intuition; subst.

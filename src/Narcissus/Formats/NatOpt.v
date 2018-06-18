@@ -41,8 +41,8 @@ Section Nat.
   Proof.
     unfold CorrectDecoder, format_nat, decode_nat.
     split.
-    { intros env xenv xenv' n n' ext ? Eeq Ppred Ppred_rest Penc.
-      destruct (proj1 (Word_decode_correct P_OK) _ _ _ _ _ ext env_OK Eeq I I Penc) as [? [? [? xenv_OK] ] ].
+    { intros env xenv xenv' n ext ? Eeq Ppred Ppred_rest Penc.
+      destruct (proj1 (Word_decode_correct P_OK _) _ _ _ _ ext env_OK Eeq I I Penc) as [? [? [? xenv_OK] ] ].
       - rewrite H; simpl; eexists; intuition eauto.
         repeat f_equal.
         destruct (wordToNat_natToWord' sz n).
@@ -56,11 +56,11 @@ Section Nat.
           omega. }
         rewrite H2 in H1. simpl in H1. rewrite <- plus_n_O in H1. eauto.
         }
-    { intros env xenv xenv' n n' ext Eeq OK_env Penc.
-      destruct (decode_word n' xenv) as [ [ [? ? ] ? ] | ] eqn: ? ;
+    { intros env xenv xenv' n ext Eeq OK_env Penc.
+      destruct (decode_word bin xenv) as [ [ [? ? ] ? ] | ] eqn: ? ;
         simpl in *; try discriminate.
       injections.
-      eapply (proj2 (Word_decode_correct P_OK)) in Heqo;
+      eapply (proj2 (Word_decode_correct P_OK _)) in Heqo;
         destruct Heqo; destruct_ex; intuition; subst; eauto.
       unfold format_word in *; computes_to_inv; injections.
       eauto.

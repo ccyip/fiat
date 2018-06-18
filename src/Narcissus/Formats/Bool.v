@@ -28,7 +28,7 @@ Section Bool.
                               format_bool decode_bool P.
   Proof.
     unfold CorrectDecoder, format_bool, decode_bool; split.
-    - intros env env' xenv w w' ext ? Eeq _ _ Penc.
+    - intros env env' xenv w ext ? Eeq _ _ Penc.
       computes_to_inv; injections.
       unfold If_Opt_Then_Else.
       erewrite dequeue_mappend_opt;
