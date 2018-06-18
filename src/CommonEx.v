@@ -98,90 +98,6 @@ Proof.
   exact v.
 Defined.
 
-Section DecodeWf.
-
-  Context {A : Type}.
-  Context {B : Type}.
-  Context {cache : Cache}.
-
-  Definition CorrectDecoderWf
-             {F : B -> Type}
-             (monoid : Monoid B)
-             (predicate : A -> Prop)
-             (rest_predicate : A -> B -> Prop)
-             (format : FormatM A B)
-             (decode : forall b, F b -> CacheDecode -> option (A * B * CacheDecode))
-             (decode_inv : CacheDecode -> Prop) :=
-    (forall env env' xenv data bin ext
-       (env_OK : decode_inv env'),
-        Equiv env env' ->
-        predicate data ->
-        rest_predicate data ext ->
-        format data env ↝ (bin, xenv) ->
-        forall pf,
-        exists xenv',
-          decode (mappend bin ext) pf env' = Some (data, ext, xenv')
-          /\ Equiv xenv xenv' /\ decode_inv xenv') /\
-    (forall env env' xenv' data bin ext pf,
-        Equiv env env'
-        -> decode_inv env'
-        -> decode bin pf env' = Some (data, ext, xenv')
-        -> decode_inv xenv'
-          /\ exists bin' xenv,
-            (format data env ↝ (bin', xenv))
-            /\ bin = mappend bin' ext
-            /\ predicate data
-            /\ Equiv xenv xenv').
-
-  Context {monoid : Monoid B}.
-  Context {P : CacheDecode -> Prop}.
-  Variable predicate : A -> Prop.
-  Variable predicate_rest : A -> B -> Prop.
-  Variable bound : B.
-  Variable decode : DecodeM A B.
-  (* :TODO: lt_B to F? *)
-  Variable decodeWf : forall b, lt_B b bound -> CacheDecode -> option (A * B * CacheDecode).
-
-  Definition decode_wf_eq
-    := forall b cd pf, decode b cd = decodeWf b pf cd.
-
-  Theorem decodeWf_correct
-    : decode_wf_eq ->
-      forall format,
-      CorrectDecoder monoid predicate predicate_rest format decode P ->
-      CorrectDecoderWf monoid predicate predicate_rest format decodeWf P.
-  Proof.
-    intros. unfold decode_wf_eq in *.
-    split; intros. {
-      destruct H0 as [? _]. edestruct H0; eauto. destruct_many.
-      eexists. repeat split; eauto. congruence.
-    } {
-      destruct H0 as [_ ?]. edestruct H0; eauto. congruence.
-    }
-  Qed.
-
-  Theorem decodeWf_lt
-    : decode_wf_eq ->
-      (forall b cd d b' cd',
-          decode b cd = Some (d, b', cd') -> lt_B b' b) ->
-      forall b pf cd d b' cd',
-        decodeWf b pf cd = Some (d, b', cd') -> lt_B b' b.
-  Proof.
-    intros. unfold decode_wf_eq in *. rewrite <- H in H1. eauto.
-  Qed.
-
-  Theorem decodeWf_le
-    : decode_wf_eq ->
-      (forall b cd d b' cd',
-          decode b cd = Some (d, b', cd') -> le_B b' b) ->
-      forall b pf cd d b' cd',
-        decodeWf b pf cd = Some (d, b', cd') -> le_B b' b.
-  Proof.
-    intros. unfold decode_wf_eq in *. rewrite <- H in H1. eauto.
-  Qed.
-
-End DecodeWf.
-
 Import Ensembles.
 
 Lemma fun_compose_format_correct
@@ -222,7 +138,7 @@ Lemma fun_compose_format_correct
       P.
 Proof.
   split; intros. {
-    destruct decode_correct as [[? [? [? ?]]] _]; eauto.
+    edestruct decode_correct as [[? [? [? ?]]] _]; eauto.
     eexists. repeat split; eauto.
     rewrite H3. simpl.
     specialize (im_OK (f data)).
@@ -230,7 +146,7 @@ Proof.
     simpl in im_OK. exfalso. auto with sets.
   } {
     decode_opt_to_inv.
-    destruct decode_correct as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
+    edestruct decode_correct as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
     specialize (im_OK x).
     destruct im; try easy. simpl in im_OK.
     injections.
@@ -265,14 +181,14 @@ Lemma shrink_format_correct
 Proof.
   split; intros. {
     specialize (predicate_dec_OK data).
-    destruct decode_correct as [[? [? [? ?]]] _]; eauto.
+    edestruct decode_correct as [[? [? [? ?]]] _]; eauto.
     eexists. rewrite H3. simpl. destruct predicate_dec; eauto.
     congruence.
   } {
     decode_opt_to_inv.
     specialize (predicate_dec_OK x). destruct predicate_dec; try easy.
     injections.
-    destruct decode_correct as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
+    edestruct decode_correct as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
     split; auto. eexists _, _. repeat split; eauto.
   }
 Qed.
@@ -296,11 +212,70 @@ Lemma shrink_format_correct_True
       monoid predicate predicate_rest format decode P.
 Proof.
   split; intros. {
-    destruct decode_correct as [[? [? [? ?]]] _]; eauto.
+    edestruct decode_correct as [[? [? [? ?]]] _]; eauto.
   } {
-    destruct decode_correct as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
+    edestruct decode_correct as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
     split; auto. eexists _, _. repeat split; eauto.
   }
+Qed.
+
+Definition FueledFix'' {A} (F : A -> A) (d : A)
+  : nat -> A :=
+  fix rec n :=
+    match n with
+    | O => d
+    | S n' => F (rec n')
+    end.
+
+Theorem FueledFix_bottom_eq {A} (F : A -> A) (d : A)
+  : forall n, FueledFix'' F d (S n) = FueledFix'' F (F d) n.
+Proof.
+  induction 0; eauto.
+  simpl in *. f_equal. eauto.
+Qed.
+
+Definition FueledFix' {A B C} (F : (B -> C -> option A) -> B -> C -> option A) :=
+  FueledFix'' F (fun _ _ => None).
+
+Definition FueledFix {A B C}
+           {monoid : Monoid B}
+           (F : (B -> C -> option A) -> B -> C -> option A)
+  : B -> C -> option A :=
+  fun b => FueledFix' F (S (bin_measure b)) b.
+
+Theorem FueledFix_continuous {A B C} (F : (B -> C -> option A) -> B -> C -> option A)
+  : (forall n a b c,
+        FueledFix' F n b c = Some a ->
+        FueledFix' F (S n) b c = Some a) ->
+    forall n n',
+      n <= n' ->
+      forall a b c,
+        FueledFix' F n b c = Some a ->
+        FueledFix' F n' b c = Some a.
+Proof.
+  intros. induction H0; eauto.
+Qed.
+
+Definition FueledFixP' {A B C D} (F : (D -> B -> C -> option A) -> D -> B -> C -> option A) :=
+  FueledFix'' F (fun _ _ _ => None).
+
+Definition FueledFixP {A B C D}
+           {monoid : Monoid B}
+           (F : (D -> B -> C -> option A) -> D -> B -> C -> option A)
+  : D -> B -> C -> option A :=
+  fun d b => FueledFixP' F (S (bin_measure b)) d b.
+
+Theorem FueledFixP_continuous {A B C D} (F : (D -> B -> C -> option A) -> D -> B -> C -> option A)
+  : (forall n a b c d,
+        FueledFixP' F n d b c = Some a ->
+        FueledFixP' F (S n) d b c = Some a) ->
+    forall n n',
+      n <= n' ->
+      forall a b c d,
+        FueledFixP' F n d b c = Some a ->
+        FueledFixP' F n' d b c = Some a.
+Proof.
+  intros. induction H0; eauto.
 Qed.
 
 Section Fix_format_correct.
@@ -310,77 +285,260 @@ Section Fix_format_correct.
   Context {monoid : Monoid B}.
   Context {P : CacheDecode -> Prop}.
   Context {P_inv : (CacheDecode -> Prop) -> Prop}.
-  Variable predicate : A -> Prop.
-  Variable predicate_rest : A -> B -> Prop.
   Variable format_body : funType [A; CacheFormat] (B * CacheFormat) ->
                          funType [A; CacheFormat] (B * CacheFormat).
+  Variable decode_body : (B -> CacheDecode -> option (A * B * CacheDecode)) ->
+                         B -> CacheDecode -> option (A * B * CacheDecode) .
   Variable format_body_OK : Frame.monotonic_function format_body.
-  Variable decode_body : forall b : B,
-      (forall b' : B, lt_B b' b -> CacheDecode -> option (A * B * CacheDecode)) ->
-      CacheDecode -> option (A * B * CacheDecode).
+  Variable predicate : A -> Prop.
+  Variable predicate_rest : A -> B -> Prop.
   Variable P_inv_OK : cache_inv_Property P P_inv.
 
-  Definition CorrectDecoderE decode data env bin xenv : Prop :=
-    forall env' ext,
-      P env' ->
-      Equiv env env' ->
-      predicate data ->
-      predicate_rest data ext ->
-      exists xenv',
-        decode (mappend bin ext) env' = Some (data, ext, xenv') /\ Equiv xenv xenv' /\ P xenv'.
-  Global Arguments CorrectDecoderE /.
-
-  Definition CorrectDecoderD format decode bin : Prop :=
-    forall env env' xenv' data ext,
-      Equiv env env' ->
-      P env' ->
-      decode env' = Some (data, ext, xenv') ->
-      P xenv' /\
-      (exists bin' xenv,
-          format data env ↝ (bin', xenv) /\ bin = mappend bin' ext /\ predicate data /\ Equiv xenv xenv').
-  Global Arguments CorrectDecoderD /.
-
-  Local Transparent computes_to.
-  Lemma fix_format_correct
+  Lemma fix_format_correct'
+        (bound : B -> nat)         (* bound is usually bin_measure. *)
         (decode_body_correct :
            cache_inv_Property P P_inv ->
-           (forall decode data env bin xenv,
-               format_body (fun data env x => CorrectDecoderE decode data env (fst x) (snd x)) data env ↝ (bin, xenv) ->
-               CorrectDecoderE (fun b => decode_body b (fun b' _ => decode b')) data env bin xenv) /\
-           (forall (format : funType [A; CacheFormat] (B * CacheFormat)) bin
-              (decode : forall b', lt_B b' bin -> CacheDecode -> option (A * B * CacheDecode)),
-               (forall b' (pf : lt_B b' bin), CorrectDecoderD format (decode b' pf) b') ->
-               CorrectDecoderD (format_body format) (decode_body bin decode) bin))
-    : CorrectDecoder
+           forall (format : funType [A; CacheFormat] (B * CacheFormat)) decode n,
+             (forall b, bound b < n ->
+                   CorrectDecoder'
+                     monoid predicate predicate_rest
+                     format decode P b) ->
+             forall b, bound b < S n ->
+                  CorrectDecoder'
+                    monoid predicate predicate_rest
+                    (format_body format) (decode_body decode) P b)
+    : forall b n,
+      bound b < n ->
+      CorrectDecoder'
         monoid predicate predicate_rest
-        (LeastFixedPoint format_body) (Fix well_founded_lt_b _ decode_body) P.
+        (LeastFixedPoint format_body) (FueledFix' decode_body n) P b.
   Proof.
     specialize (decode_body_correct P_inv_OK).
-    split; intros. {
-      match goal with
-      | |- exists _, ?f _ _ = _ /\ _ =>
-        eapply (LeastFixedPoint_ind format_body (fun data env x => CorrectDecoderE f data env (fst x) (snd x))) in H2
-      end.
-      simpl in *.
-      3 : apply refineFun_refl.
-      apply H2; eauto.
-      unfold refineFun, refine. destruct 0. intros.
-      apply decode_body_correct in H3. simpl in *.
-      unfold computes_to. simpl. intros.
-      rewrite Init.Wf.Fix_eq by solve_extensionality. apply H3; eauto.
+    intros.
+    generalize dependent b.
+    induction n; simpl; intros. {
+      inversion H.
     } {
-      generalize dependent ext.
-      generalize dependent data.
-      generalize dependent xenv'.
-      generalize dependent env'.
-      generalize dependent env.
-      induction bin using (well_founded_ind well_founded_lt_b); intros.
-      rewrite Init.Wf.Fix_eq in H2 by solve_extensionality.
-      eapply decode_body_correct in H2; eauto.
-      destruct_many. intuition eauto. eexists _, _. intuition eauto.
-      eapply (unroll_LeastFixedPoint' format_body_OK); eauto.
-      simpl in *. intros. eauto.
+      split; intros. {
+        eapply (unroll_LeastFixedPoint format_body_OK) in H3; eauto.
+        eapply decode_body_correct; eauto.
+      } {
+        eapply decode_body_correct in H2; eauto.
+        destruct_many.
+        eapply (unroll_LeastFixedPoint' format_body_OK) in H3; eauto.
+        eauto 8.
+      }
     }
   Qed.
 
+  (* :TODO: make it stronger? *)
+  Lemma fix_format_correct
+        (decode_body_correct :
+           cache_inv_Property P P_inv ->
+           forall (format : funType [A; CacheFormat] (B * CacheFormat)) decode n,
+             (forall b, bin_measure b < n ->
+                   CorrectDecoder'
+                     monoid predicate predicate_rest
+                     format decode P b) ->
+             forall b, bin_measure b < S n ->
+                  CorrectDecoder'
+                    monoid predicate predicate_rest
+                    (format_body format) (decode_body decode) P b)
+        (decode_body_continuous :
+           forall decode,
+             (forall b cd a b' cd',
+                 decode b cd = Some (a, b', cd') ->
+                 decode_body decode b cd = Some (a, b', cd')) ->
+             forall b cd a b' cd',
+               decode_body decode b cd = Some (a, b', cd') ->
+               decode_body (decode_body decode) b cd = Some (a, b', cd'))
+    : CorrectDecoder
+        monoid predicate predicate_rest
+        (LeastFixedPoint format_body) (FueledFix decode_body) P.
+  Proof.
+    split. 2 : eapply fix_format_correct'; eauto.
+    edestruct fix_format_correct' as [H _]; eauto.
+    intros. edestruct H; eauto. destruct_many.
+    eexists. repeat split; eauto.
+    eapply FueledFix_continuous.
+    3 : eauto. 2 : rewrite mappend_measure; omega.
+    destruct a as [[? ?] ?]. revert a b c. induction n. easy.
+    intros. simpl in *. eauto.
+  Qed.
+  
 End Fix_format_correct.
+
+Section Fix_format_correctP.
+
+  Context {A B C : Type}.
+  Context {cache : Cache}.
+  Context {monoid : Monoid B}.
+  Context {P : CacheDecode -> Prop}.
+  Context {P_inv : (CacheDecode -> Prop) -> Prop}.
+  Variable format_body : funType [A; CacheFormat] (B * CacheFormat) ->
+                         funType [A; CacheFormat] (B * CacheFormat).
+  Variable decode_body : (C -> B -> CacheDecode -> option (A * B * CacheDecode)) ->
+                         C -> B -> CacheDecode -> option (A * B * CacheDecode) .
+  Variable format_body_OK : Frame.monotonic_function format_body.
+  (* :TODO: better handling? *)
+  Variable predicate : C -> A -> Prop.
+  Variable predicate_rest : A -> B -> Prop.
+  Variable P_inv_OK : cache_inv_Property P P_inv.
+
+  Lemma fix_format_correctP'
+        (bound : B -> nat)         (* bound is usually bin_measure. *)
+        (decode_body_correct :
+           cache_inv_Property P P_inv ->
+           forall (format : funType [A; CacheFormat] (B * CacheFormat)) decode n,
+             (forall b, bound b < n ->
+                   forall c,
+                     CorrectDecoder'
+                       monoid (predicate c) predicate_rest
+                       format (decode c) P b) ->
+             forall b, bound b < S n ->
+                  forall c,
+                    CorrectDecoder'
+                      monoid (predicate c) predicate_rest
+                      (format_body format) (decode_body decode c) P b)
+    : forall b n,
+      bound b < n ->
+      forall c,
+        CorrectDecoder'
+          monoid (predicate c) predicate_rest
+          (LeastFixedPoint format_body) (FueledFixP' decode_body n c) P b.
+  Proof.
+    specialize (decode_body_correct P_inv_OK).
+    intros.
+    generalize dependent c.
+    generalize dependent b.
+    induction n; simpl; intros. {
+      inversion H.
+    } {
+      split; intros. {
+        eapply (unroll_LeastFixedPoint format_body_OK) in H3; eauto.
+        eapply decode_body_correct; eauto.
+      } {
+        eapply decode_body_correct in H2; eauto.
+        destruct_many.
+        eapply (unroll_LeastFixedPoint' format_body_OK) in H3; eauto.
+        eauto 8.
+      }
+    }
+  Qed.
+
+  (* :TODO: make it stronger? *)
+  Lemma fix_format_correctP
+        (decode_body_correct :
+           cache_inv_Property P P_inv ->
+           forall (format : funType [A; CacheFormat] (B * CacheFormat)) decode c n,
+             (forall b, bin_measure b < n ->
+                   CorrectDecoder'
+                     monoid (predicate c) predicate_rest
+                     format (decode c) P b) ->
+             forall b, bin_measure b < S n ->
+                  CorrectDecoder'
+                    monoid (predicate c) predicate_rest
+                    (format_body format) (decode_body decode c) P b)
+        (decode_body_continuous :
+           forall decode,
+             (forall c b cd a b' cd',
+                 decode c b cd = Some (a, b', cd') ->
+                 decode_body decode c b cd = Some (a, b', cd')) ->
+             forall c b cd a b' cd',
+               decode_body decode c b cd = Some (a, b', cd') ->
+               decode_body (decode_body decode) c b cd = Some (a, b', cd'))
+    : forall c,
+      CorrectDecoder
+        monoid (predicate c) predicate_rest
+        (LeastFixedPoint format_body) (FueledFixP decode_body c) P.
+  Proof.
+    split. 2 : eapply fix_format_correctP'; eauto.
+    edestruct fix_format_correctP' as [H _]; eauto.
+    intros. edestruct H; eauto. destruct_many.
+    eexists. repeat split; eauto.
+    eapply FueledFixP_continuous.
+    3 : eauto. 2 : rewrite mappend_measure; omega.
+    destruct a as [[? ?] ?]. revert a b c0. induction n. easy.
+    intros. simpl in *. eauto.
+  Qed.
+
+  (* :TODO: how to generalize this? *)
+  Lemma fix_format_correctP2'
+        (bound : B -> nat)         (* bound is usually bin_measure. *)
+        (decode_body_correct :
+           cache_inv_Property P P_inv ->
+           forall decode n,
+             (forall b, bound b < n ->
+                   forall c,
+                     CorrectDecoder'
+                       monoid (predicate c) predicate_rest
+                       (LeastFixedPoint format_body) (decode c) P b) ->
+             forall b, bound b < S n ->
+                  forall c,
+                    CorrectDecoder'
+                      monoid (predicate c) predicate_rest
+                      (format_body (LeastFixedPoint format_body)) (decode_body decode c) P b)
+    : forall b n,
+      bound b < n ->
+      forall c,
+        CorrectDecoder'
+          monoid (predicate c) predicate_rest
+          (LeastFixedPoint format_body) (FueledFixP' decode_body n c) P b.
+  Proof.
+    specialize (decode_body_correct P_inv_OK).
+    intros.
+    generalize dependent c.
+    generalize dependent b.
+    induction n; simpl; intros. {
+      inversion H.
+    } {
+      split; intros. {
+        eapply (unroll_LeastFixedPoint format_body_OK) in H3; eauto.
+        eapply decode_body_correct; eauto.
+      } {
+        eapply decode_body_correct in H2; eauto.
+        destruct_many.
+        eapply (unroll_LeastFixedPoint' format_body_OK) in H3; eauto.
+        eauto 8.
+      }
+    }
+  Qed.
+
+  Lemma fix_format_correctP2
+        (decode_body_correct :
+           cache_inv_Property P P_inv ->
+           forall decode n,
+             (forall b, bin_measure b < n ->
+                   forall c,
+                     CorrectDecoder'
+                       monoid (predicate c) predicate_rest
+                       (LeastFixedPoint format_body) (decode c) P b) ->
+             forall b, bin_measure b < S n ->
+                  forall c,
+                    CorrectDecoder'
+                      monoid (predicate c) predicate_rest
+                      (format_body (LeastFixedPoint format_body)) (decode_body decode c) P b)
+        (decode_body_continuous :
+           forall decode,
+             (forall c b cd a b' cd',
+                 decode c b cd = Some (a, b', cd') ->
+                 decode_body decode c b cd = Some (a, b', cd')) ->
+             forall c b cd a b' cd',
+               decode_body decode c b cd = Some (a, b', cd') ->
+               decode_body (decode_body decode) c b cd = Some (a, b', cd'))
+    : forall c,
+      CorrectDecoder
+        monoid (predicate c) predicate_rest
+        (LeastFixedPoint format_body) (FueledFixP decode_body c) P.
+  Proof.
+    split. 2 : eapply fix_format_correctP2'; eauto.
+    edestruct fix_format_correctP2' as [H _]; eauto.
+    intros. edestruct H; eauto. destruct_many.
+    eexists. repeat split; eauto.
+    eapply FueledFixP_continuous.
+    3 : eauto. 2 : rewrite mappend_measure; omega.
+    destruct a as [[? ?] ?]. revert a b c0. induction n. easy.
+    intros. simpl in *. eauto.
+  Qed.
+  
+End Fix_format_correctP.
