@@ -298,15 +298,15 @@ Section Fix_format_correct.
         (bound : B -> nat)         (* bound is usually bin_measure. *)
         (decode_body_correct :
            cache_inv_Property P P_inv ->
-           forall (format : funType [A; CacheFormat] (B * CacheFormat)) decode n,
+           forall n,
              (forall b, bound b < n ->
                    CorrectDecoder'
                      monoid predicate predicate_rest
-                     format decode P b) ->
+                     (LeastFixedPoint format_body) (FueledFix' decode_body n) P b) ->
              forall b, bound b < S n ->
                   CorrectDecoder'
                     monoid predicate predicate_rest
-                    (format_body format) (decode_body decode) P b)
+                    (format_body (LeastFixedPoint format_body)) (decode_body (FueledFix' decode_body n)) P b)
     : forall b n,
       bound b < n ->
       CorrectDecoder'
@@ -335,15 +335,15 @@ Section Fix_format_correct.
   Lemma fix_format_correct
         (decode_body_correct :
            cache_inv_Property P P_inv ->
-           forall (format : funType [A; CacheFormat] (B * CacheFormat)) decode n,
+           forall n,
              (forall b, bin_measure b < n ->
                    CorrectDecoder'
                      monoid predicate predicate_rest
-                     format decode P b) ->
+                     (LeastFixedPoint format_body) (FueledFix' decode_body n) P b) ->
              forall b, bin_measure b < S n ->
                   CorrectDecoder'
                     monoid predicate predicate_rest
-                    (format_body format) (decode_body decode) P b)
+                    (format_body (LeastFixedPoint format_body)) (decode_body (FueledFix' decode_body n)) P b)
         (decode_body_continuous :
            forall decode,
              (forall b cd a b' cd',
@@ -380,7 +380,6 @@ Section Fix_format_correctP.
   Variable decode_body : (C -> B -> CacheDecode -> option (A * B * CacheDecode)) ->
                          C -> B -> CacheDecode -> option (A * B * CacheDecode) .
   Variable format_body_OK : Frame.monotonic_function format_body.
-  (* :TODO: better handling? *)
   Variable predicate : C -> A -> Prop.
   Variable predicate_rest : A -> B -> Prop.
   Variable P_inv_OK : cache_inv_Property P P_inv.
@@ -389,17 +388,17 @@ Section Fix_format_correctP.
         (bound : B -> nat)         (* bound is usually bin_measure. *)
         (decode_body_correct :
            cache_inv_Property P P_inv ->
-           forall (format : funType [A; CacheFormat] (B * CacheFormat)) decode n,
+           forall n,
              (forall b, bound b < n ->
                    forall c,
                      CorrectDecoder'
                        monoid (predicate c) predicate_rest
-                       format (decode c) P b) ->
+                       (LeastFixedPoint format_body) (FueledFixP' decode_body n c) P b) ->
              forall b, bound b < S n ->
                   forall c,
                     CorrectDecoder'
                       monoid (predicate c) predicate_rest
-                      (format_body format) (decode_body decode c) P b)
+                      (format_body (LeastFixedPoint format_body)) (decode_body (FueledFixP' decode_body n) c) P b)
     : forall b n,
       bound b < n ->
       forall c,
@@ -430,15 +429,17 @@ Section Fix_format_correctP.
   Lemma fix_format_correctP
         (decode_body_correct :
            cache_inv_Property P P_inv ->
-           forall (format : funType [A; CacheFormat] (B * CacheFormat)) decode c n,
+           forall n,
              (forall b, bin_measure b < n ->
-                   CorrectDecoder'
-                     monoid (predicate c) predicate_rest
-                     format (decode c) P b) ->
+                   forall c,
+                     CorrectDecoder'
+                       monoid (predicate c) predicate_rest
+                       (LeastFixedPoint format_body) (FueledFixP' decode_body n c) P b) ->
              forall b, bin_measure b < S n ->
-                  CorrectDecoder'
-                    monoid (predicate c) predicate_rest
-                    (format_body format) (decode_body decode c) P b)
+                  forall c,
+                    CorrectDecoder'
+                      monoid (predicate c) predicate_rest
+                      (format_body (LeastFixedPoint format_body)) (decode_body (FueledFixP' decode_body n) c) P b)
         (decode_body_continuous :
            forall decode,
              (forall c b cd a b' cd',
@@ -462,23 +463,25 @@ Section Fix_format_correctP.
     intros. simpl in *. eauto.
   Qed.
 
-  (* :TODO: how to generalize this? *)
   Lemma fix_format_correctP2'
+        (Pb : B -> Prop)
         (bound : B -> nat)         (* bound is usually bin_measure. *)
         (decode_body_correct :
            cache_inv_Property P P_inv ->
-           forall decode n,
-             (forall b, bound b < n ->
+           forall n,
+             (forall b, Pb b -> bound b < n ->
                    forall c,
                      CorrectDecoder'
                        monoid (predicate c) predicate_rest
-                       (LeastFixedPoint format_body) (decode c) P b) ->
-             forall b, bound b < S n ->
+                       (LeastFixedPoint format_body) (FueledFixP' decode_body n c) P b) ->
+             forall b, Pb b -> bound b < S n ->
                   forall c,
                     CorrectDecoder'
                       monoid (predicate c) predicate_rest
-                      (format_body (LeastFixedPoint format_body)) (decode_body decode c) P b)
-    : forall b n,
+                      (format_body (LeastFixedPoint format_body)) (decode_body (FueledFixP' decode_body n) c) P b)
+    : forall b,
+      Pb b ->
+      forall n,
       bound b < n ->
       forall c,
         CorrectDecoder'
@@ -486,7 +489,7 @@ Section Fix_format_correctP.
           (LeastFixedPoint format_body) (FueledFixP' decode_body n c) P b.
   Proof.
     specialize (decode_body_correct P_inv_OK).
-    intros.
+    intros ? HPb. intros.
     generalize dependent c.
     generalize dependent b.
     induction n; simpl; intros. {
@@ -504,20 +507,22 @@ Section Fix_format_correctP.
     }
   Qed.
 
+  (* :TODO: make it stronger? *)
   Lemma fix_format_correctP2
+        (Pb : B -> Prop)
         (decode_body_correct :
            cache_inv_Property P P_inv ->
-           forall decode n,
-             (forall b, bin_measure b < n ->
+           forall n,
+             (forall b, Pb b -> bin_measure b < n ->
                    forall c,
                      CorrectDecoder'
                        monoid (predicate c) predicate_rest
-                       (LeastFixedPoint format_body) (decode c) P b) ->
-             forall b, bin_measure b < S n ->
+                       (LeastFixedPoint format_body) (FueledFixP' decode_body n c) P b) ->
+             forall b, Pb b -> bin_measure b < S n ->
                   forall c,
                     CorrectDecoder'
                       monoid (predicate c) predicate_rest
-                      (format_body (LeastFixedPoint format_body)) (decode_body decode c) P b)
+                      (format_body (LeastFixedPoint format_body)) (decode_body (FueledFixP' decode_body n) c) P b)
         (decode_body_continuous :
            forall decode,
              (forall c b cd a b' cd',
@@ -526,11 +531,13 @@ Section Fix_format_correctP.
              forall c b cd a b' cd',
                decode_body decode c b cd = Some (a, b', cd') ->
                decode_body (decode_body decode) c b cd = Some (a, b', cd'))
-    : forall c,
-      CorrectDecoder
+    : forall c bin,
+      Pb bin ->
+      CorrectDecoder'
         monoid (predicate c) predicate_rest
-        (LeastFixedPoint format_body) (FueledFixP decode_body c) P.
+        (LeastFixedPoint format_body) (FueledFixP decode_body c) P bin.
   Proof.
+    intros ? ? HPb.
     split. 2 : eapply fix_format_correctP2'; eauto.
     edestruct fix_format_correctP2' as [H _]; eauto.
     intros. edestruct H; eauto. destruct_many.
