@@ -32,7 +32,6 @@ Section SizedList.
   Variable A_format_some : forall d b ce ce', A_format d ce ↝ (b, ce') -> 0 < bin_measure b.
   (* Could be le. *)
   Variable A_decode_lt : forall b cd x b' cd', A_decode b cd = Some (x, b', cd') -> lt_B b' b.
-  Variable A_decode_correct : CorrectDecoder monoid A_predicate A_predicate_rest A_format A_decode A_cache_inv.
 
   Definition SizedList_format_body
              (format : funType [list A; CacheFormat] (B * CacheFormat))
@@ -96,20 +95,60 @@ Section SizedList.
     omega.
   Qed.
 
+  Theorem SizedList_format_sz_eq'
+    : forall xs,
+      (forall x, In x xs ->
+          forall b1 b2 ce1 ce1' ce2 ce2',
+          A_format x ce1 ↝ (b1, ce1') ->
+          A_format x ce2 ↝ (b2, ce2') ->
+          bin_measure b1 = bin_measure b2) ->
+      forall b1 b2 ce1 ce1' ce2 ce2',
+        SizedList_format xs ce1 ↝ (b1, ce1') ->
+        SizedList_format xs ce2 ↝ (b2, ce2') ->
+        bin_measure b1 = bin_measure b2.
+  Proof.
+    clear.
+    unfold SizedList_format.
+    induction xs; intros;
+      apply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H0;
+      apply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H1.
+    - inversion H0. inversion H1. auto.
+    - simpl in H0, H1. computes_to_inv2.
+      rewrite !mappend_measure.
+      f_equal. eapply H; eauto. intuition.
+      eapply IHxs; eauto. intros. eapply H; eauto.
+      intuition.
+  Qed.
+
   Theorem SizedList_format_sz_eq
     : forall xs b1 b2 ce1 ce1' ce2 ce2',
       SizedList_format xs ce1 ↝ (b1, ce1') ->
       SizedList_format xs ce2 ↝ (b2, ce2') ->
       bin_measure b1 = bin_measure b2.
   Proof.
+    intros. eapply SizedList_format_sz_eq'; eauto.
+  Qed.
+
+  Theorem SizedList_format_byte'
+    : forall xs,
+      (forall x, In x xs ->
+            forall b ce ce',
+              A_format x ce ↝ (b, ce') -> bin_measure b mod 8 = 0) ->
+      forall b ce ce',
+        SizedList_format xs ce ↝ (b, ce') ->
+        bin_measure b mod 8 = 0.
+  Proof.
+    clear.
     unfold SizedList_format.
     induction xs; intros;
-      apply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H;
       apply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H0.
-    - inversion H. inversion H0. auto.
-    - simpl in H, H0. computes_to_inv2.
-      rewrite !mappend_measure.
-      erewrite A_format_sz_eq; eauto.
+    - inversion H0. rewrite mempty_measure_0. auto.
+    - simpl in H0. computes_to_inv2. rewrite mappend_measure.
+      rewrite <- Nat.add_mod_idemp_r; auto.
+      rewrite <- Nat.add_mod_idemp_l; auto.
+      erewrite H; eauto.
+      erewrite IHxs; eauto. intros. eapply H; eauto.
+      all : intuition.
   Qed.
 
   Theorem SizedList_format_byte
@@ -117,15 +156,7 @@ Section SizedList.
       SizedList_format xs ce ↝ (b, ce') ->
       bin_measure b mod 8 = 0.
   Proof.
-    unfold SizedList_format.
-    induction xs; intros;
-      apply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H.
-    - inversion H. rewrite mempty_measure_0. auto.
-    - simpl in H. computes_to_inv2. rewrite mappend_measure.
-      rewrite <- Nat.add_mod_idemp_r; auto.
-      rewrite <- Nat.add_mod_idemp_l; auto.
-      erewrite A_format_byte; eauto.
-      erewrite IHxs; eauto.
+    intros. eapply SizedList_format_byte'; eauto.
   Qed.
 
   Fixpoint SizedList_predicate_rest (xs : list A) (b : B) : Prop :=
@@ -144,18 +175,25 @@ Section SizedList.
 
   Local Arguments Nat.add : simpl never.
   Local Arguments Nat.sub : simpl never.
-  Theorem SizedList_decode_correct
-    : forall sz,
-      CorrectDecoder
+
+  Theorem SizedList_decode_correct'
+          (m : nat)
+          (A_decode_correct : forall b',
+              bin_measure b' < m ->
+              CorrectDecoder' monoid A_predicate A_predicate_rest A_format A_decode A_cache_inv b')
+    : forall sz b',
+      bin_measure b' < m ->
+      CorrectDecoder'
         monoid
         (SizedList_predicate sz)
         SizedList_predicate_rest
-        SizedList_format (SizedList_decode sz) A_cache_inv.
+        SizedList_format (SizedList_decode sz) A_cache_inv b'.
   Proof.
     unfold SizedList_format, SizedList_decode, SizedList_format_body, SizedList_decode_body.
-    intros.
     eapply fix_format_correctP2; eauto. apply SizedList_format_body_monotone.
+    instantiate (1:=fun _ => True). reflexivity.
     unfold SizedList_predicate, SizedList_format, SizedList_format_body in *.
+    intros ? ? ? ? HPb.
     split; intros. {
       destruct data. {
         destruct_many.
@@ -176,6 +214,7 @@ Section SizedList.
         }
         clear H3.
         computes_to_inv2.
+        rewrite mappend_measure in HPb.
         rewrite mappend_measure in H1.
         pose proof H5. apply A_format_some in H3.
         assert (0 < bin_measure (mappend b1 b0)). {
@@ -189,14 +228,14 @@ Section SizedList.
         exfalso. rewrite !mappend_measure in l. omega.
         rewrite !mappend_measure.
         match goal with
-        | _ : _ |- context [decode ?a _ _] =>
+        | _ : _ |- context [FueledFixP' _ _ ?a _ _] =>
           replace a with (bin_measure b0) by omega
         end.
         eapply H0 in H5'; eauto. destruct_many.
         rewrite H11. simpl. eexists. intuition.
-        omega.
+        omega. omega.
         split. intros. eapply SizedList_format_sz_eq; eauto.
-        intros. apply H6. intuition. apply H4. apply H6. intuition.
+        intros. apply H6. intuition. apply H4. omega. apply H6. intuition.
         eapply H4. eauto.
       }
     } {
@@ -212,6 +251,7 @@ Section SizedList.
         eapply A_decode_correct in H4; eauto. destruct_many.
         destruct lt_dec; try congruence.
         decode_opt_to_inv. subst.
+        rewrite mappend_measure in HPb.
         eapply H0 in H5; eauto. destruct_many.
         split; eauto. eexists _, _. repeat split; eauto.
         - computes_to_econstructor; eauto.
@@ -224,6 +264,7 @@ Section SizedList.
             eapply A_format_sz_eq; eauto.
           } omega.
         - destruct 1; subst; auto.
+        - omega.
         - rewrite mappend_measure in H1.
           apply A_format_some in H6. omega.
       }
@@ -234,6 +275,18 @@ Section SizedList.
     destruct lt_dec; eauto.
     decode_opt_to_inv. erewrite H; eauto.
     simpl. auto.
+  Qed.
+
+  Theorem SizedList_decode_correct
+          (A_decode_correct : CorrectDecoder monoid A_predicate A_predicate_rest A_format A_decode A_cache_inv)
+    : forall sz,
+      CorrectDecoder
+        monoid
+        (SizedList_predicate sz)
+        SizedList_predicate_rest
+        SizedList_format (SizedList_decode sz) A_cache_inv.
+  Proof.
+    intros. intro. eapply SizedList_decode_correct'; eauto.
   Qed.
 
 End SizedList.
