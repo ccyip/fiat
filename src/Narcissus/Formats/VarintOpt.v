@@ -340,6 +340,20 @@ Section Varint.
     intros; f_equal; eapply Varint_format_eq; eauto.
   Qed.
 
+  Theorem Varint_format_some
+    : forall d ce b ce',
+      Varint_format d ce ↝ (b, ce') ->
+      (0 < bin_measure b)%nat.
+  Proof.
+    unfold Varint_format. simpl. intros.
+    apply (unroll_LeastFixedPoint Varint_format_body_monotone) in H. simpl in H.
+    destruct N.div_eucl as [q r]. destruct q.
+    eapply format_word_some in H. auto. omega.
+    computes_to_inv2.
+    eapply format_word_some in H. 2 : omega.
+    rewrite mappend_measure. omega.
+  Qed.
+
 End Varint.
 
 Require Import
