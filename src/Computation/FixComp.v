@@ -24,6 +24,13 @@ Fixpoint funType
   | cons T fDom' => T -> funType fDom' fCod
   end.
 
+Definition funType_dep
+         {A : Type}
+         (fDom : list (A -> Type))
+         (fCod : Type)
+  : Type :=
+  forall a : A, funType (List.map (fun f => f a) fDom) fCod.
+
 Definition funDef (fSig : funSig) :=
   funType (funDom fSig) (funCod fSig).
 
@@ -43,6 +50,14 @@ Fixpoint refineFun
     fun fSet' fSet =>
       forall (t : T), refineFun (fSet' t) (fSet t)
   end fSet' fSet.
+
+Definition refineFun_dep
+         {A : Type}
+         {fDom : list (A -> Type)}
+         {fCod : Type}
+         (fSet' fSet : funType_dep fDom fCod)
+  : Prop :=
+  forall (a : A), refineFun (fSet' a) (fSet a).
 
 Lemma refineFun_refl
       {fDom : list Type}
@@ -85,6 +100,14 @@ Definition refineEquivFun
   : Prop :=
   refineFun fSet fSet' /\ refineFun fSet' fSet.
 
+Definition refineEquivFun_dep
+           {A : Type}
+           {fDom : list (A -> Type)}
+           {fCod : Type}
+           (fSet' fSet : funType_dep fDom fCod)
+  : Prop :=
+  forall (a : A), refineEquivFun (fSet' a) (fSet a).
+
 Add Parametric Morphism fDom fCod
   : (@refineFun fDom fCod)
     with signature (refineEquivFun
@@ -112,6 +135,14 @@ Fixpoint FunMax
       (fun (t : T) => FunMax (fSet' t) (fSet t))
   end fSet' fSet.
 
+Definition FunMax_dep
+         {A : Type}
+         {fDom : list (A -> Type)}
+         {fCod : Type}
+         (fSet' fSet : funType_dep fDom fCod)
+  : funType_dep fDom fCod :=
+  fun (a : A) => FunMax (fSet' a) (fSet a).
+
 Fixpoint FunMin
          {fDom : list Type}
          {fCod : Type}
@@ -129,6 +160,14 @@ Fixpoint FunMin
       (fun (t : T) => FunMin (fSet' t) (fSet t))
   end fSet' fSet.
 
+Definition FunMin_dep
+         {A : Type}
+         {fDom : list (A -> Type)}
+         {fCod : Type}
+         (fSet' fSet : funType_dep fDom fCod)
+  : funType_dep fDom fCod :=
+  fun (a : A) => FunMin (fSet' a) (fSet a).
+
 Module LeastFixedPointFun.
   Import Fiat.Common.Frame.
 
@@ -142,12 +181,33 @@ Module LeastFixedPointFun.
       min := FunMin
     }.
 
+  Instance funDefOps_dep
+           {A : Type}
+           {fDom : list (A -> Type)}
+           {fCod : Type}
+    : Fiat.Common.Frame.Lattice.Ops (funType_dep fDom fCod) :=
+    { le := refineFun_dep;
+      eq := refineEquivFun_dep;
+      max := FunMax_dep;
+      min := FunMin_dep
+    }.
+
   Instance PreO_refineFun
            {fDom : list Type}
            {fCod : Type}
     : PreO.t (@refineFun fDom fCod) :=
     { le_refl := refineFun_refl;
       le_trans := refineFun_trans }.
+
+  Instance PreO_refineFun_dep
+           {A : Type}
+           {fDom : list (A -> Type)}
+           {fCod : Type}
+    : PreO.t (@refineFun_dep A fDom fCod) := {}.
+  Proof.
+    - unfold refineFun_dep. eauto using refineFun_refl.
+    - unfold refineFun_dep. eauto using refineFun_trans.
+  Defined.
 
   Lemma refineFun_Proper
         {fDom : list Type}
@@ -178,6 +238,25 @@ Module LeastFixedPointFun.
     { PreO := PreO_refineFun;
       le_proper := refineFun_Proper;
       le_antisym := refineFun_antisym}.
+
+  Instance PO_refineFun_dep
+           {A : Type}
+           {fDom : list (A -> Type)}
+           {fCod : Type}
+    : PO.t (@refineFun_dep A fDom fCod) refineEquivFun_dep :=
+    { PreO := PreO_refineFun_dep }.
+  Proof.
+    - unfold refineEquivFun_dep, refineFun_dep.
+      unfold Proper, respectful in *.
+      intros ? ? H1 ? ? H2.
+      split; intros;
+        epose proof refineFun_Proper as H';
+        edestruct H'.
+      apply H1. apply H2. eauto.
+      apply H1. apply H2. eauto.
+    - unfold refineEquivFun_dep, refineFun_dep.
+      eauto using refineFun_antisym.
+  Defined.
 
   Local Transparent computes_to.
 
@@ -277,6 +356,28 @@ Module LeastFixedPointFun.
       min_proper := funMin_Proper;
       min_ok := FunMin_ok
     }.
+
+  Instance Lattice_funDef_dep
+           {A : Type}
+           {fDom : list (A -> Type)}
+           {fCod : Type}
+    : Lattice.t _ (@funDefOps_dep A fDom fCod) :=
+    { PO := PO_refineFun_dep }.
+  Proof.
+    all : simpl.
+    - unfold refineEquivFun_dep, FunMax_dep.
+      unfold Proper, respectful in *.
+      intros. eapply funMax_Proper; eauto.
+    - unfold FunMax_dep.
+      split; unfold refineFun_dep; intros;
+        apply FunMax_ok; eauto.
+    - unfold refineEquivFun_dep, FunMax_dep.
+      unfold Proper, respectful in *.
+      intros. eapply funMin_Proper; eauto.
+    - unfold FunMax_dep.
+      split; unfold refineFun_dep; intros;
+        apply FunMin_ok; eauto.
+  Defined.
 
   Fixpoint unCurry_funType
            (fDom : list Type)
@@ -429,12 +530,28 @@ Module LeastFixedPointFun.
         fun (t : T) => refineFun_lift fDom' (fun cv => LFP_P (fun cv' => cv (cv' t)))
     end.
 
+  Definition refineFun_lift_dep
+           {A : Type}
+           (fDom : list (A -> Type))
+           {fCod : Type}
+    : ((funType_dep fDom fCod -> Prop) -> Prop) -> funType_dep fDom fCod :=
+    fun LFP_P =>
+      fun (a : A) => refineFun_lift (List.map (fun f => f a) fDom) (fun cv => LFP_P (fun cv' => cv (cv' a))).
+
   Definition refineFun_sup
              {fDom : list Type}
              {fCod : Type}
              (f : funType fDom fCod -> Prop)
     : funType fDom fCod :=
     refineFun_lift fDom (fun z => (forall s, f s -> z s)).
+
+  Definition refineFun_sup_dep
+             {A : Type}
+             {fDom : list (A -> Type)}
+             {fCod : Type}
+             (f : funType_dep fDom fCod -> Prop)
+    : funType_dep fDom fCod :=
+    refineFun_lift_dep (fun z => (forall s, f s -> z s)).
 
   Lemma refineEquivFun_lift
         {fDom : list Type}
@@ -503,12 +620,47 @@ Module LeastFixedPointFun.
       eapply (refineFun_unCurry _ _ _ H1); eauto.
   Qed.
 
+  Lemma lub_refineFun_sup_dep
+        {A : Type}
+        (fDom : list (A -> Type))
+        {fCod : Type}
+        (f : funType_dep fDom fCod -> Prop)
+    : lub f (refineFun_sup_dep f).
+  Proof.
+    unfold refineFun_sup_dep, refineFun_lift_dep.
+    unfold lub; split.
+    - simpl; intros. intro.
+      rewrite refineEquivFun_lift; simpl.
+      etransitivity.
+      eapply refineFunEquiv_unCurry.
+      eapply refineFun_Curry'.
+      simpl; unfold refine, computes_to; intros; eauto.
+    - simpl; intros. intro.
+      etransitivity; [ eapply refineEquivFun_lift |
+                       eapply refineFun_unCurry' ].
+      simpl; intros.
+      etransitivity.
+      eapply (proj1 (refineFunEquiv_Curry  _ _)).
+      simpl.
+      unfold refine, computes_to; intros.
+      eapply H in H1. specialize (H1 a).
+      eapply (refineFun_unCurry _ _ _ H1); eauto.
+  Qed.
+
   Definition refineFun_inf
              {fDom : list Type}
              {fCod : Type}
              (f : funType fDom fCod -> Prop)
     : funType fDom fCod :=
     refineFun_lift fDom (fun z => exists s, f s /\ z s).
+
+  Definition refineFun_inf_dep
+             {A : Type}
+             {fDom : list (A -> Type)}
+             {fCod : Type}
+             (f : funType_dep fDom fCod -> Prop)
+    : funType_dep fDom fCod :=
+    refineFun_lift_dep (fun z => exists s, f s /\ z s).
 
   Definition glb_refineFun_inf
              (fDom : list Type)
@@ -536,6 +688,33 @@ Module LeastFixedPointFun.
       eapply refineFun_unCurry in H2; apply H2; eauto.
   Qed.
 
+  Definition glb_refineFun_inf_dep
+             {A : Type}
+             (fDom : list (A -> Type))
+             {fCod : Type}
+             (f : funType_dep fDom fCod -> Prop)
+    : glb f (refineFun_inf_dep f).
+  Proof.
+    unfold refineFun_inf_dep, refineFun_lift_dep.
+    unfold glb; split.
+    - simpl; intros. intro.
+      etransitivity; [ eapply refineEquivFun_lift | ].
+      etransitivity; [eapply refineFun_Curry' | ].
+      simpl; unfold refine, computes_to.
+      intros; eauto.
+      eapply refineFunEquiv_unCurry.
+    - simpl; intros. intro.
+      etransitivity; [ | eapply refineEquivFun_lift ].
+      eapply refineFun_unCurry'.
+      simpl; intros.
+      unfold refine, computes_to; intros.
+      pose proof (proj2 (refineFunEquiv_Curry _ _) t _ H0).
+      simpl in H1; unfold computes_to in H1; destruct H1;
+        intuition.
+      apply H in H2.
+      eapply refineFun_unCurry in H2; apply H2; eauto.
+  Qed.
+
   Instance CompleteLattice_funDef
            {fDom : list Type}
            {fCod : Type}
@@ -546,6 +725,19 @@ Module LeastFixedPointFun.
   Proof.
     eapply glb_refineFun_inf.
     eapply lub_refineFun_sup.
+  Defined.
+
+  Instance CompleteLattice_funDef_dep
+           {A : Type}
+           {fDom : list (A -> Type)}
+           {fCod : Type}
+    :  CompleteLattice (O := @funDefOps_dep A fDom fCod) :=
+    { cl_sup := refineFun_sup_dep;
+      cl_inf := refineFun_inf_dep
+    }.
+  Proof.
+    eapply glb_refineFun_inf_dep.
+    eapply lub_refineFun_sup_dep.
   Defined.
 
   (* The use of refineFun as the relation on our lattice makes  *)
@@ -562,6 +754,14 @@ Module LeastFixedPointFun.
     : funType fDom fCod :=
     (cl_sup (postfixed_point fDef)).
 
+  Definition LeastFixedPoint_dep
+             {A : Type}
+             {fDom : list (A -> Type)}
+             {fCod : Type}
+             (fDef : funType_dep fDom fCod -> funType_dep fDom fCod)
+    : funType_dep fDom fCod :=
+    (cl_sup (postfixed_point fDef)).
+
   (* [unroll_LeastFixedPoint] is for unrolling one layer of *)
   (* recursion in an assumption about the result of a Fixpoint *)
   (* computation. *)
@@ -576,6 +776,17 @@ Module LeastFixedPointFun.
     eapply (Is_GreatestFixedPoint fDef fDef_monotone).
   Qed.
 
+  Lemma unroll_LeastFixedPoint_dep
+        {A : Type}
+        {fDom : list (A -> Type)}
+        {fCod : Type}
+        (fDef : funType_dep fDom fCod -> funType_dep fDom fCod)
+        (fDef_monotone : monotonic_function fDef)
+    : refineFun_dep (fDef (LeastFixedPoint_dep fDef)) (LeastFixedPoint_dep fDef).
+  Proof.
+    intro. eapply (Is_GreatestFixedPoint fDef fDef_monotone).
+  Qed.
+
   (* [unroll_LeastFixedPoint'] is for unrolling one layer of *)
   (* recursion in the conclusion about a Fixpoint computation. *)
 
@@ -587,6 +798,17 @@ Module LeastFixedPointFun.
     : refineFun (LeastFixedPoint fDef) (fDef (LeastFixedPoint fDef)).
   Proof.
     eapply (Is_GreatestFixedPoint fDef fDef_monotone).
+  Qed.
+
+  Lemma unroll_LeastFixedPoint_dep'
+        {A : Type}
+        {fDom : list (A -> Type)}
+        {fCod : Type}
+        (fDef : funType_dep fDom fCod -> funType_dep fDom fCod)
+        (fDef_monotone : monotonic_function fDef)
+    : refineFun_dep (LeastFixedPoint_dep fDef) (fDef (LeastFixedPoint_dep fDef)).
+  Proof.
+    intro. eapply (Is_GreatestFixedPoint fDef fDef_monotone).
   Qed.
 
   Lemma refine_LeastFixedPoint
