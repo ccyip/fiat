@@ -5,7 +5,7 @@ Require Import
 Require Import
         Fiat.Common.BoundedLookup.
 
-Import Vectors.VectorDef.VectorNotations.
+Import Vectors.Vector.VectorNotations.
 Local Open Scope vector_scope.
 Local Open Scope string_scope.
 
