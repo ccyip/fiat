@@ -963,7 +963,7 @@ Section PB_IRElm_body.
         match val with
         | inl (inl v) => PB_WireType_format ty v
         | inl (inr l) => PB_LengthDelimited_format (PB_WireType_format ty) l
-        | inr ir => PB_LengthDelimited_format format ir
+        | inr ir => PB_LengthDelimited_format format (rev ir)
         end
       end.
 
@@ -996,7 +996,7 @@ Section PB_IRElm_body.
           | PB_Repeated (PB_Embedded desc') =>
             if PB_WireType_eq_dec PB_LengthDelimited wty then
               `(ir, b', cd') <- PB_LengthDelimited_decode (decode desc') b cd;
-                Some (Build_PB_IRElm t PB_LengthDelimited (inr ir), b', cd')
+                Some (Build_PB_IRElm t PB_LengthDelimited (inr (rev ir)), b', cd')
             else None
           end
         | inr tag =>
@@ -1037,9 +1037,10 @@ Section PB_IRElm_body.
           edestruct (PB_LengthDelimited_decode_correct' (A:=PB_IRElm)) as [[? [? [? ?]]] _]; eauto.
           intros. eapply decode_correct. auto.
           instantiate (1 := p0).
+          intro. rewrite <- in_rev.
           apply PB_IRElm_OK_equiv. apply H3.
           eapply SizedList_predicate_rest_True.
-          rewrite H0. simpl. eauto.
+          rewrite H0. simpl. rewrite rev_involutive. eauto.
         - destruct val; try easy. injections.
           destruct PB_WireType_eq_dec.
           + destruct s; intuition; subst; [| easy].
@@ -1056,9 +1057,9 @@ Section PB_IRElm_body.
           destruct PB_WireType_eq_dec; [| easy]. subst.
           edestruct (PB_LengthDelimited_decode_correct' (A:=PB_IRElm))
             as [[? [? [? ?]]] _]; eauto. intros. apply decode_correct. auto.
-          instantiate (1 := p0). apply PB_IRElm_OK_equiv. apply H3.
+          instantiate (1 := p0). intro. rewrite <- in_rev. apply PB_IRElm_OK_equiv. apply H3.
           eapply SizedList_predicate_rest_True.
-          rewrite H0. simpl. eauto.
+          rewrite H0. simpl. rewrite rev_involutive. eauto.
       } {
         destruct val; [destruct s |]; try easy. injections.
         edestruct PB_WireType_decode_correct as [[? [? [? ?]]] _]; eauto.
@@ -1082,9 +1083,9 @@ Section PB_IRElm_body.
           subst. simpl.
           edestruct (PB_LengthDelimited_decode_correct' (A:=PB_IRElm)) as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
           intros. apply decode_correct. auto.
-          intuition. eexists _, _. intuition; eauto. rewrite Heqs0.
+          intuition. eexists _, _. intuition; eauto. rewrite rev_involutive. eauto. rewrite Heqs0.
           destruct PB_Message_tagToType; destruct p; injections; try easy.
-          intuition. apply (PB_IRElm_OK_equiv p0). eauto.
+          intuition. apply (PB_IRElm_OK_equiv p0). intro. rewrite <- in_rev. eauto.
         - destruct PB_WireType_eq_dec. decode_opt_to_inv.
           subst. existT_eq_dec; try apply PB_WireType_eq_dec.
           subst. simpl.
@@ -1105,9 +1106,9 @@ Section PB_IRElm_body.
           subst. simpl.
           edestruct (PB_LengthDelimited_decode_correct' (A:=PB_IRElm)) as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
           intros. apply decode_correct. auto.
-          intuition. eexists _, _. intuition; eauto. rewrite Heqs0.
+          intuition. eexists _, _. intuition; eauto. rewrite rev_involutive; eauto. rewrite Heqs0.
           destruct PB_Message_tagToType; destruct p; injections; try easy.
-          intuition. apply (PB_IRElm_OK_equiv p0). eauto.
+          intuition. apply (PB_IRElm_OK_equiv p0). intro. rewrite <- in_rev. eauto.
       } {
         decode_opt_to_inv.
         subst. existT_eq_dec; try apply PB_WireType_eq_dec.
@@ -1226,7 +1227,7 @@ Proof.
   eapply (unroll_LeastFixedPoint' (SizedList_format_body_monotone _)).
   eapply (unroll_LeastFixedPoint (SizedList_format_body_monotone _)) in H0.
   revert v H0. revert c.
-  induction l. auto. intros ? ?.
+  induction (rev l). auto. intros ? ?.
   apply SetoidMorphisms.refine_bind. apply H.
   intros [? ?].
   apply SetoidMorphisms.refine_bind.
@@ -1281,8 +1282,8 @@ Proof.
     rewrite !(@mappend_measure _ ByteStringQueueMonoid).
     f_equal. eapply Varint_format_sz_eq; eauto.
     f_equal. unfold PB_IRVal_format in *.
-    rewrite Forall_forall in H. 
-    eapply PB_LengthDelimited_format_sz_eq'; eauto.
+    rewrite Forall_forall in H.
+    eapply PB_LengthDelimited_format_sz_eq'. intro. rewrite <- in_rev. all : eauto.
   }
 Qed.
 
@@ -1319,7 +1320,7 @@ Proof.
     rewrite Nat.add_0_r. rewrite Nat.mod_mod; eauto.
     unfold PB_IRVal_format in *.
     rewrite Forall_forall in H. 
-    eapply PB_LengthDelimited_format_byte'; eauto.
+    eapply PB_LengthDelimited_format_byte'. intro. rewrite <- in_rev. all : eauto.
   }
 Qed.
 
@@ -2211,7 +2212,7 @@ Proof.
       destruct PB_Message_boundedTag eqn:Heq; simpl in *. {
         decode_opt_to_inv.
         pose proof H4 as Hnil. apply PB_Message_IR_decode_nil' in Hnil. subst.
-        (* :TODO: better solution? *)
+        (* :TODO: better solution? ? ?@ *)
         assert (exists (msg : PB_Message_denote d) (t : BoundedTag d) pf,
                    PB_Message_lookup x b0 = (eq_rect _ _ (PB_Message_lookup msg t) _ pf) /\
                    x = msg /\ b0 = t /\ forall pf', pf = pf') as L1. {
@@ -2427,15 +2428,3 @@ Proof.
 Qed.
 
 Print Assumptions PB_Message_decode_correct.
-
-(* Example *)
-Open Scope Tuple.
-Import Vectors.VectorDef.VectorNotations.
-Definition PersonMessage : PB_Message :=
-  Build_PB_Message
-    [Build_PB_Field (PB_Singular (PB_Primitive PB_fixed64)) "id" 1;
-     Build_PB_Field (PB_Singular (PB_Primitive PB_int32)) " age" 2].
-
-Definition MyPerson : PB_Message :=
-  Build_PB_Message
-    [Build_PB_Field (PB_Singular (PB_Embedded PersonMessage)) "mp" 1].
