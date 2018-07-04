@@ -815,4 +815,31 @@ Proof.
   all : apply PB_Message_tagToType_cons; eauto using PB_Message_OK_hd.
 Qed.
 
-Print Assumptions PB_Message_IR_encode_correct.
+Definition PB_Message_encode' (desc : PB_Message)
+  : {impl : _ |
+     PB_Message_OK desc ->
+     forall msg : PB_Message_denote desc,
+        refine (PB_Message_format desc msg ())
+               (ret (impl msg ))}.
+Proof.
+  eexists. intros. unfold PB_Message_format.
+  etransitivity.
+  unfold Bind2. rewrite PB_Message_IR_encode_correct.
+  simplify with monad laws.
+  rewrite SizedList_format_eq_format_list.
+  rewrite (naive_format_list (fun _ => True)).
+  higher_order_reflexivity.
+  intros. apply (proj2_sig PB_IRElm_encode').
+  eauto. eauto.
+  higher_order_reflexivity.
+Defined.
+
+Arguments split1 : simpl never.
+Arguments split2 : simpl never.
+Arguments weq : simpl never.
+Arguments natToWord : simpl never.
+Arguments Guarded_Vector_split : simpl never.
+Arguments Core.append_word : simpl never.
+Arguments proj1_sig /.
+Definition PB_Message_encode (desc : PB_Message) :=
+  Eval simpl in (proj1_sig (PB_Message_encode' desc)).
