@@ -342,7 +342,8 @@ src/Narcissus/Examples/Toy2.v
 src/Narcissus/Examples/ProtobufLengthDelimited.v
 src/Narcissus/Examples/ProtobufSpec.v
 src/Narcissus/Examples/AlignedProtobuf.v
-src/Narcissus/Examples/ProtobufExtract.v
+src/Narcissus/Examples/ProtobufEncoder.v
+src/Narcissus/Examples/ProtobufExample.v
 src/Narcissus/Examples/BRASS/Telemetry.v
 src/Narcissus/Examples/DNS/DNSPacket.v
 src/Narcissus/Examples/DNS/DnsOpt.v
