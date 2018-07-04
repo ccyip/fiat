@@ -1572,8 +1572,8 @@ Section DomainName.
       (fun s b => True)
       format_DomainName decode_DomainName cache_inv.
   Proof.
-    unfold CorrectDecoder; split.
-    { intros env xenv xenv' l l' ext ? Eeq Valid_data
+    unfold CorrectDecoder. intros l'. split.
+    { intros env xenv xenv' l ext ? Eeq Valid_data
              Ppred_rest Penc.
       unfold decode_DomainName in *; simpl in *.
       unfold format_DomainName in Penc.
@@ -1623,8 +1623,8 @@ Section DomainName.
       induction n; intros; simpl in *.
       destruct l; simpl in *; try omega.
       { apply (unroll_LeastFixedPoint (fDom := [DomainName; CacheFormat]) (fCod := (B * CacheFormat))) in Penc; auto using format_body_monotone; simpl in Penc.
-         destruct (proj1 (Ascii_decode_correct (proj1 (proj2 (proj2 P_OK))))
-                        _ _ _ _ _ ext0 env_OK Eeq I I Penc) as [? [? [? x2_OK] ] ].
+         destruct (proj1 (Ascii_decode_correct (proj1 (proj2 (proj2 P_OK))) _)
+                        _ _ _ _ ext0 env_OK Eeq I I Penc) as [? [? [? x2_OK] ] ].
         apply DecodeBindOpt2_inv in H0;
           destruct H0 as [? [? [? [? ?] ] ] ]; injections; subst.
         eexists; repeat split.
@@ -1654,8 +1654,8 @@ Section DomainName.
         auto using format_body_monotone.
         { destruct (string_dec l ""); simpl in Penc.
           (* Base case for domain name. *)
-          - destruct (proj1 (Ascii_decode_correct (proj1 (proj2 (proj2 P_OK))))
-                            _ _ _ _ _ ext0 env_OK Eeq I I Penc) as [? [? [? xenv_OK] ] ].
+          - destruct (proj1 (Ascii_decode_correct (proj1 (proj2 (proj2 P_OK))) _)
+                            _ _ _ _ ext0 env_OK Eeq I I Penc) as [? [? [? xenv_OK] ] ].
             apply DecodeBindOpt2_inv in H0;
               destruct H0 as [? [? [? [? ?] ] ] ]; injections; subst.
             eexists; repeat split.
@@ -1736,10 +1736,10 @@ Section DomainName.
               destruct v1 as [b'' xenv'''']; destruct v2 as [b3 xenv5];
                 simpl in *; injections.
             destruct l_eq as [l_eq' | l_eq'].
-            - destruct (fun H => proj1 (Nat_decode_correct (P := fun _ => True) 8 (fun _ _ _ => I)) _ _ _ _ _ (mappend b'' (mappend b3 ext0)) I Eeq H I Penc'') as [xenv4 [? xenv_eqv] ].
+            - destruct (fun H => proj1 (Nat_decode_correct (P := fun _ => True) 8 (fun _ _ _ => I) _) _ _ _ _ (mappend b'' (mappend b3 ext0)) I Eeq H I Penc'') as [xenv4 [? xenv_eqv] ].
             pose proof ((proj1 Valid_data) ""%string label1 _ l_eq' label1_OK).
             unfold pow2; omega.
-            destruct (fun H => proj1 (String_decode_correct (P := fun _ => True) (fun _ _ _ => I) (String.length label1)) _ _ _ _ _ (mappend b3 ext0) I (proj1 xenv_eqv) H I Penc''') as [xenv6 [? xenv6_eqv] ]; eauto.
+            destruct (fun H => proj1 (String_decode_correct (P := fun _ => True) (fun _ _ _ => I) (String.length label1) _) _ _ _ _ (mappend b3 ext0) I (proj1 xenv_eqv) H I Penc''') as [xenv6 [? xenv6_eqv] ]; eauto.
             pose proof (fun a b c d e =>
                           InCacheFixpoint (String.length label2) _ _ _ _ a b c d e Penc'''')
                  as xenv'0_OK.
@@ -2001,16 +2001,16 @@ Section DomainName.
                   rewrite H1; eauto.
             + subst; eauto using ValidDomainName_app.
             + subst; eauto using chomp_label_length.
-            + destruct (fun H H' => proj2 (Nat_decode_correct (P := cache_inv) 8 H') _ _ _ _ _ (mappend b'' (mappend b3 ext0)) Eeq H H0) as [xenv'' [? xenv''_eqv] ]; eauto.
+            + destruct (fun H H' => proj2 (Nat_decode_correct (P := cache_inv) 8 H' _) _ _ _ _ (mappend b'' (mappend b3 ext0)) Eeq H H0) as [xenv'' [? xenv''_eqv] ]; eauto.
               unfold cache_inv_Property in *; intuition.
-              destruct (fun H H' => proj2 (String_decode_correct (P := cache_inv) H' (String.length label1)) _ _ _ _ _ (mappend b3 ext0) (proj1 xenv_eqv) H H1) as [xenv10 [? xenv10_eqv] ]; intuition eauto.
+              destruct (fun H H' => proj2 (String_decode_correct (P := cache_inv) H' (String.length label1) _) _ _ _ _ (mappend b3 ext0) (proj1 xenv_eqv) H H1) as [xenv10 [? xenv10_eqv] ]; intuition eauto.
               unfold cache_inv_Property in *; intuition.
             + intuition.
             - injections.
-              destruct (fun H => proj1 (Nat_decode_correct (P := fun _ => True) 8 (fun _ _ _ => I)) _ _ _ _ _ (mappend b'' (mappend b3 ext0)) I Eeq H I Penc'') as [xenv4 [? [xenv_eqv _] ] ].
+              destruct (fun H => proj1 (Nat_decode_correct (P := fun _ => True) 8 (fun _ _ _ => I) _) _ _ _ _ (mappend b'' (mappend b3 ext0)) I Eeq H I Penc'') as [xenv4 [? [xenv_eqv _] ] ].
               pose proof (proj1 Valid_data ""%string l ""%string (append_EmptyString_r _) label1_OK).
               unfold pow2; simpl; omega.
-              destruct (fun H H' => proj1 (String_decode_correct (P := fun _ => True) (fun _ _ _ => I) (String.length l)) _ xenv4 _ _ _ (mappend b3 ext0) I H' H I Penc''') as [xenv6 [? [xenv6_eqv _] ] ]; eauto.
+              destruct (fun H H' => proj1 (String_decode_correct (P := fun _ => True) (fun _ _ _ => I) (String.length l) _) _ xenv4 _ _ (mappend b3 ext0) I H' H I Penc''') as [xenv6 [? [xenv6_eqv _] ] ]; eauto.
               intuition.
               simpl in Penc''''.
               pose proof (fun a b c d e =>
@@ -2196,9 +2196,9 @@ Section DomainName.
                 omega.
                 destruct pre; simpl in *; try discriminate.
               * simpl; omega.
-              * destruct (fun H H' => proj2 (Nat_decode_correct (P := cache_inv) 8 H') _ _ _ _ _ (mappend b'' (mappend b3 ext0)) Eeq H H0) as [xenv'' [? xenv''_eqv] ]; eauto.
+              * destruct (fun H H' => proj2 (Nat_decode_correct (P := cache_inv) 8 H' _) _ _ _ _ (mappend b'' (mappend b3 ext0)) Eeq H H0) as [xenv'' [? xenv''_eqv] ]; eauto.
               unfold cache_inv_Property in *; intuition.
-              destruct (fun H H' => proj2 (String_decode_correct (P := cache_inv) H' (String.length l)) _ _ _ _ _ (mappend b3 ext0) xenv_eqv H H1) as [xenv10 [? xenv10_eqv] ]; intuition eauto.
+              destruct (fun H H' => proj2 (String_decode_correct (P := cache_inv) H' (String.length l) _) _ _ _ _ (mappend b3 ext0) xenv_eqv H H1) as [xenv10 [? xenv10_eqv] ]; intuition eauto.
               unfold cache_inv_Property in *; intuition.
               * intuition.
           }
@@ -2226,10 +2226,10 @@ Section DomainName.
         destruct s; try discriminate; injections.
         eapply Decode_w_Measure_le_eq' in H2.
         eapply Decode_w_Measure_le_eq' in H3.
-        destruct (proj2 (Word_decode_correct (proj1 (proj2 (proj2 P_OK)))) _ _ _ _ _ _ H0 H1 H2) as
+        destruct (proj2 (Word_decode_correct (proj1 (proj2 (proj2 P_OK))) _) _ _ _ _ _ H0 H1 H2) as
             [? [b' [xenv [enc_x0 [x_eq [_ xenv_eqv] ] ] ] ] ].
-        destruct (proj2 (Word_decode_correct (proj1 (proj2 (proj2 P_OK))))
-                        _ _ _ _ _ _ xenv_eqv H4 H3) as
+        destruct (proj2 (Word_decode_correct (proj1 (proj2 (proj2 P_OK))) _)
+                        _ _ _ _ _ xenv_eqv H4 H3) as
             [? [b'' [xenv' [enc_x0' [x_eq' [_ xenv_eqv'] ] ] ] ] ].
         split; eauto; eexists _, _; split; eauto.
         apply (unroll_LeastFixedPoint'
@@ -2261,7 +2261,7 @@ Section DomainName.
         + (* This is the terminal character. *)
           injections.
           eapply Decode_w_Measure_le_eq' in H2.
-          destruct (proj2 (Word_decode_correct (proj1 (proj2 (proj2 P_OK)))) _ _ _ _ _ _ H0 H1 H2) as
+          destruct (proj2 (Word_decode_correct (proj1 (proj2 (proj2 P_OK))) _) _ _ _ _ _ H0 H1 H2) as
               [? [b' [xenv [enc_x0 [x_eq [_ xenv_eqv] ] ] ] ] ]; split; eauto.
           eexists _, _; split; eauto.
           apply (unroll_LeastFixedPoint'
@@ -2291,20 +2291,20 @@ Section DomainName.
             destruct H4 as [? [? [? [? ?] ] ] ]; injections; subst.
           apply Decode_w_Measure_le_eq' in H2.
           apply Decode_w_Measure_lt_eq' in H3.
-          destruct (proj2 (Word_decode_correct (proj1 (proj2 (proj2 P_OK)))) _ _ _ _ _ _ H0 H1 H2) as
+          destruct (proj2 (Word_decode_correct (proj1 (proj2 (proj2 P_OK))) _) _ _ _ _ _ H0 H1 H2) as
               [? [b' [xenv [enc_x0 [x_eq [? xenv_eqv] ] ] ] ] ]; eauto.
           destruct (fun H  => proj2 (String_decode_correct
                                        (P := cache_inv)
                                        (proj1 (proj2 (proj2 P_OK)))
-                                       (wordToNat x0))
-                                    _ _ _ _ _ _ xenv_eqv H H3) as
+                                       (wordToNat x0) _)
+                                    _ _ _ _ _ xenv_eqv H H3) as
               [? [b'' [xenv'' [enc_x0' [x_eq' [? xenv_eqv'] ] ] ] ] ]; eauto.
-          eapply H in H4; eauto.
-          intuition.
-          destruct H11 as [bin' [xenv0 [? [? [? ? ] ] ] ] ].
-          destruct (string_dec x6 ""); simpl in *;
-            injections.
   Admitted.
+          (* eapply H in H4; eauto. *)
+          (* intuition. *)
+          (* destruct H11 as [bin' [xenv0 [? [? [? ? ] ] ] ] ]. *)
+          (* destruct (string_dec x6 ""); simpl in *; *)
+          (*   injections. *)
          (* uncomment below for <8.7. Need to patch up for latest Coq release.
  { injection H5; intros; rewrite H14.
             destruct (peekD env') eqn: ?; simpl in *; eauto.
