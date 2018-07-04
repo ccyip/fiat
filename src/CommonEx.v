@@ -67,6 +67,7 @@ Ltac existT_eq_dec :=
 Ltac gen_eq_rect :=
   match goal with
   | _ : _ |- context [eq_rect _ _ _ _ ?e] => generalize e; try destruct 0
+  | _ : _ |- context [eq_rect_r _ _ ?e] => generalize e; try destruct 0
   end.
 
 Ltac choose_br n :=
