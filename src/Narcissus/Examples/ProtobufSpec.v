@@ -753,13 +753,9 @@ Theorem PB_Message_tagToDenoteType_correct (desc : PB_Message)
     = PB_Message_tagToDenoteType tag.
 Proof.
   apply PB_denote_type_eq.
-Qed.
+Defined.
 
-(* Definition PB_Message_lookup {desc : PB_Message} *)
-(*            (msg : PB_Message_denote (Build_PB_Message (PB_MessageDesc desc))) *)
-(*            (tag : BoundedTag desc) := *)
-(*   type_cast_r (PB_Message_tagToDenoteType_correct desc tag) *)
-(*               (GetAttributeRaw msg (PB_Message_tagToIndex tag)). *)
+Opaque PB_Message_tagToDenoteType_correct.
 
 Definition PB_Message_lookup' {n} {desc : PB_Desc n}
            (msg : PB_Message_denote (Build_PB_Message desc))
@@ -774,17 +770,6 @@ Definition PB_Message_lookup {desc : PB_Message} :=
   | Build_PB_Message _ v =>
     fun msg tag => @PB_Message_lookup' _ v msg tag
   end.
-
-(* Definition PB_Message_update {desc : PB_Message} *)
-(*            (msg : PB_Message_denote (Build_PB_Message (PB_MessageDesc desc))) *)
-(*            (tag : BoundedTag desc) *)
-(*            (value : PB_Type_denote (PB_Message_tagToType tag)) *)
-(*   : PB_Message_denote (Build_PB_Message (PB_MessageDesc desc)) := *)
-(*   SetAttributeRaw msg (PB_Message_tagToIndex tag) *)
-(*                   (type_cast *)
-(*                      (PB_Message_tagToDenoteType_correct *)
-(*                         desc tag) *)
-(*                      value). *)
 
 Definition PB_Message_update' {n} {desc : PB_Desc n}
            (msg : PB_Message_denote (Build_PB_Message desc))
@@ -1879,9 +1864,14 @@ Proof.
     trial 7.
 Qed.
 
+Definition PB_Message_IR_format_ref' (desc : PB_Message) msg'
+  : FormatM (PB_Message_denote desc) PB_IR :=
+  fun msg _ => {b | PB_IR_refine msg' (fst b) msg}.
+Arguments PB_Message_IR_format_ref' /.
+
 Definition PB_Message_IR_format_ref (desc : PB_Message)
   : FormatM (PB_Message_denote desc) PB_IR :=
-  fun msg _ => {b | PB_IR_refine (PB_Message_default desc) (fst b) msg}.
+  PB_Message_IR_format_ref' desc (PB_Message_default desc).
 
 Definition PB_Message_IR_format' := LeastFixedPoint_dep PB_Message_IR_format_body.
 
@@ -1890,21 +1880,15 @@ Definition PB_Message_IR_format (desc : PB_Message)
   fun msg =>
     PB_Message_IR_format' _ (PB_Message_default desc) msg.
 
-Theorem PB_Message_IR_format_eq (desc : PB_Message)
-  : forall msg ce ir ce',
-    (PB_Message_IR_format_ref desc msg ce ↝ (ir, ce')) <-> (PB_Message_IR_format desc msg ce ↝ (ir, ce')).
+Theorem PB_Message_IR_format_eq' (desc : PB_Message)
+  : forall msg' msg ce,
+    refineEquiv (PB_Message_IR_format_ref' desc msg' msg ce)
+                (PB_Message_IR_format' desc msg' msg ce).
 Proof.
-  unfold PB_Message_IR_format_ref, PB_Message_IR_format, PB_Message_IR_format'. unfold Pick.
+  unfold refineEquiv, refine.
+  unfold PB_Message_IR_format_ref', PB_Message_IR_format'. unfold Pick.
   unfold computes_to. simpl.
-  intros. split; intros. {
-    induction H; intros; apply (unroll_LeastFixedPoint_dep' PB_Message_IR_format_body_monotone);
-      let rec trial n := match n with
-                         | O => try solve [choose_br 0; auto]
-                         | S ?n' => try solve [choose_br n; repeat eexists; eauto]; trial n'
-                         end in
-      trial 7.
-  } {
-    revert H. generalize (PB_Message_default desc).
+  intros. split; intros [ir ce'] H; simpl in *. {
     generalize dependent desc.
     generalize dependent ce.
     generalize dependent ce'.
@@ -1916,7 +1900,22 @@ Proof.
     subst. eapply PB_IR_embedded_some; eauto.
     eapply IH; eauto; apply PB_IR_measure_cons_lt || apply PB_IR_measure_embedded_lt.
     eapply IH; eauto; apply PB_IR_measure_cons_lt || apply PB_IR_measure_embedded_lt.
+  } {
+    induction H; intros; apply (unroll_LeastFixedPoint_dep' PB_Message_IR_format_body_monotone);
+      let rec trial n := match n with
+                         | O => try solve [choose_br 0; auto]
+                         | S ?n' => try solve [choose_br n; repeat eexists; eauto]; trial n'
+                         end in
+      trial 7.
   }
+Qed.
+
+Theorem PB_Message_IR_format_eq (desc : PB_Message)
+  : forall msg ce,
+    refineEquiv (PB_Message_IR_format_ref desc msg ce)
+                (PB_Message_IR_format desc msg ce).
+Proof.
+  apply PB_Message_IR_format_eq'.
 Qed.
 
 Definition PB_Message_IR_decode_body
@@ -2013,8 +2012,8 @@ Lemma PB_Message_IR_Elm_OK (desc : PB_Message)
   : PB_Message_IR_format desc msg ce ↝ (ir, ce') ->
     forall elm : PB_IRElm, In elm ir -> PB_IRElm_OK desc elm.
 Proof.
-  rewrite <- PB_Message_IR_format_eq.
-  unfold PB_Message_IR_format_ref. unfold computes_to, Pick. simpl.
+  intro H. apply (proj1 (PB_Message_IR_format_eq _ _ _)) in H. revert H.
+  unfold PB_Message_IR_format_ref. simpl. unfold computes_to, Pick. simpl.
   induction 1; intros; try easy;
     match goal with
     | H : In _ _ |- _ => destruct H
