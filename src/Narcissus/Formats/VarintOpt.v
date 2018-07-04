@@ -406,3 +406,97 @@ Proof.
     destruct d; easy.
   }
 Qed.
+
+Require Import
+        Fiat.Computation
+        Fiat.Computation.SetoidMorphisms
+        Fiat.Narcissus.BinLib.AlignWord
+        Fiat.Computation.SetoidMorphisms.
+
+Definition Varint_encode_ref : N -> CacheFormat -> (ByteString * CacheFormat).
+Proof.
+  refine
+    (Fix N.lt_wf_0 _
+         (fun n rec ce =>
+            let q := fst (N.div_eucl n (2^7)) in
+            let r := snd (N.div_eucl n (2^7)) in
+            match q return (q > 0 -> CacheFormat -> (ByteString * CacheFormat)) -> _ with
+            | N0 => fun _ => encode_word (NToWord 8 r) ce
+            | Npos _ =>
+              fun f =>
+              let r' := r + (2^7) in
+              let (b1, ce1) := encode_word (NToWord 8 r') ce in
+              let (b2, ce2) := (f _) ce1 in
+              (mappend b1 b2, ce2)
+            end (fun H => rec q _)
+    )%N).
+  easy.
+  apply (div_eucl_div_lt n (2 ^ 7) q r); subst q r.
+  now destruct n.
+  easy.
+  destruct N.div_eucl. easy.
+Defined.
+
+Arguments CacheFormat : simpl never.
+Definition Varint_encode'
+  : {impl : _ | refineFun (fDom:=[N:Type; CacheFormat])
+                          Varint_format (Lift_cfunType _ _ impl)}.
+Proof.
+  eexists.
+  etransitivity.
+  - eapply Finish_refining_LeastFixedPoint with (wf_P := N.lt_wf_0);
+      unfold Varint_format_body; simpl; intros.
+    + destruct N.div_eucl eqn:?. destruct n; try reflexivity.
+      apply SetoidMorphisms.refine_bind. reflexivity. intro.
+      apply SetoidMorphisms.refine_bind. auto. reflexivity.
+    + unfold respectful_hetero; simpl; intros.
+      instantiate (1 := fun r y t =>
+                          let q := fst (N.div_eucl r (2^7)) in
+                          let r := snd (N.div_eucl r (2^7)) in
+                          match q return ((q > 0)%N -> CacheFormat -> (ByteString * CacheFormat)) -> _ with
+                          | N0 => fun _ => _
+                          | Npos _ =>
+                            fun f => _ (f _)
+                          end (fun H => y q _)).
+      simpl.
+      match goal with
+      | |- context [fun H' => y ?a (@?b H')] =>
+        match type of b with
+        | ?H =>
+          let L := fresh in
+          assert H as L; [| clear L]
+        end
+      end. {
+        clear. intros.
+        abstract (destruct N.div_eucl eqn:?; simpl in *;
+                  eapply div_eucl_div_lt; eauto; [| easy];
+                  destruct r; injections; easy) using Varint_encode'_subproof.
+      }
+      instantiate (1:=Varint_encode'_subproof _ H).
+      generalize (Varint_encode'_subproof r). intros.
+      destruct N.div_eucl eqn:?.
+      simpl in *. destruct n.
+      simpl. apply aligned_format_char_eq.
+      simpl.
+      unfold Bind2.
+      rewrite aligned_format_char_eq. simplify with monad laws.
+      simpl.
+      match goal with
+      | |- context [y _ ?b] =>
+        rewrite (H _ b)
+      end.
+      simplify with monad laws.
+      simpl.
+      higher_order_reflexivity.
+  - simpl; intros; higher_order_reflexivity.
+
+    Grab Existential Variables.
+    easy.
+Defined.
+
+Lemma Varint_encode_correct
+  : refineFun (fDom:=[N:Type; CacheFormat])
+              Varint_format (Lift_cfunType _ _ (proj1_sig Varint_encode')).
+Proof.
+  apply (proj2_sig Varint_encode').
+Qed.

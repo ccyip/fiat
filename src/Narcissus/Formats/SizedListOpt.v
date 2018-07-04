@@ -7,6 +7,7 @@ Require Import
         Fiat.Common.Frame
         Fiat.Computation.FixComp
         Fiat.Narcissus.BinLib.Core
+        Fiat.Narcissus.Formats.FixListOpt
         Fiat.Narcissus.Common.Notations
         Fiat.Narcissus.Common.Specs
         Fiat.Narcissus.Common.ComposeOpt.
@@ -77,6 +78,26 @@ Section SizedList.
     intro.
     apply SetoidMorphisms.refine_bind. apply H.
     intro. reflexivity.
+  Qed.
+
+  Lemma SizedList_format_eq_format_list
+    : forall xs ce,
+      refineEquiv (SizedList_format xs ce) (format_list A_format xs ce).
+  Proof.
+    clear. unfold refineEquiv, refine.
+    induction xs; intros; split; intros; destruct v.
+    - apply (unroll_LeastFixedPoint' SizedList_format_body_monotone).
+      eauto.
+    - apply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H.
+      eauto.
+    - apply (unroll_LeastFixedPoint' SizedList_format_body_monotone).
+      simpl in *. computes_to_inv2.
+      eapply IHxs in H'.
+      computes_to_econstructor; eauto.
+    - apply (unroll_LeastFixedPoint SizedList_format_body_monotone) in H.
+      simpl in *. computes_to_inv2.
+      eapply IHxs in H'.
+      computes_to_econstructor; eauto.
   Qed.
 
   Theorem SizedList_decode_le
