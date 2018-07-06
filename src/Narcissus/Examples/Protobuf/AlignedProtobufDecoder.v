@@ -51,6 +51,7 @@ Proof.
     rewrite <- build_aligned_ByteString_append. auto.
 Qed.
 
+(* :TODO: move this elsewhere. *)
 Definition AlignedDecodeNChar numBytes
   : forall n, AlignedDecodeM (word (8*n)) numBytes.
 Proof.

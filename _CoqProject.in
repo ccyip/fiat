@@ -339,11 +339,11 @@ src/Narcissus/Examples/ICMP_Packet.v
 src/Narcissus/Examples/IntExample.v
 src/Narcissus/Examples/Toy.v
 src/Narcissus/Examples/Toy2.v
-src/Narcissus/Examples/ProtobufLengthDelimited.v
-src/Narcissus/Examples/ProtobufSpec.v
-src/Narcissus/Examples/AlignedProtobuf.v
-src/Narcissus/Examples/ProtobufEncoder.v
-src/Narcissus/Examples/ProtobufExample.v
+src/Narcissus/Examples/Protobuf/ProtobufLengthDelimited.v
+src/Narcissus/Examples/Protobuf/ProtobufSpec.v
+src/Narcissus/Examples/Protobuf/ProtobufEncoder.v
+src/Narcissus/Examples/Protobuf/ProtobufExample.v
+src/Narcissus/Examples/Protobuf/AlignedProtobufDecoder.v
 src/Narcissus/Examples/BRASS/Telemetry.v
 src/Narcissus/Examples/DNS/DNSPacket.v
 src/Narcissus/Examples/DNS/DnsOpt.v
