@@ -17,7 +17,8 @@ Require Import
         Fiat.Narcissus.BinLib.AlignedMonads
         Fiat.Narcissus.Formats.WordOpt
         Fiat.Narcissus.Stores.EmptyStore
-        Fiat.Narcissus.Examples.Protobuf.ProtobufSpec.
+        Fiat.Narcissus.Examples.Protobuf.ProtobufSpec
+        Fiat.Narcissus.Examples.Protobuf.ProtobufEncoder.
 
 Require Import NArith NArithRing.
 
@@ -30,6 +31,11 @@ Definition Timestamp : PB_Message :=
       (Build_PB_Field (PB_Singular (PB_Primitive PB_int32)) "nanos" 2)
     ].
 
+Definition Timestamp_construct
+           (seconds : N) (nanos : N) : PB_Message_denote Timestamp :=
+  <"seconds" :: seconds,
+   "nanos" :: nanos>.
+
 Definition Timestamp_destruct {A}
            (f : N -> N -> A)
            (msg : PB_Message_denote Timestamp) :=
@@ -40,6 +46,11 @@ Definition PhoneNumber : PB_Message :=
       (Build_PB_Field (PB_Singular (PB_Primitive PB_string)) "number" 1);
       (Build_PB_Field (PB_Singular (PB_Primitive PB_int32)) "type" 2)
     ].
+
+Definition PhoneNumber_construct
+           (number : list char) (type : N) : PB_Message_denote PhoneNumber :=
+  <"number" :: number,
+   "type" :: type>.
 
 Definition PhoneNumber_destruct {A}
            (f : list char -> N -> A)
@@ -55,6 +66,16 @@ Definition Person : PB_Message :=
       (Build_PB_Field (PB_Singular (PB_Embedded Timestamp)) "last_updated" 5)
     ].
 
+Definition Person_construct
+           (name : list char) (id : N) (email : list char)
+           (phones : list (PB_Message_denote PhoneNumber))
+           (last_updated : option (PB_Message_denote Timestamp)) : PB_Message_denote Person :=
+  <"name" :: name,
+   "id" :: id,
+   "email" :: email,
+   "phones" :: phones,
+   "last_updated" :: last_updated>.
+
 Definition Person_destruct {A}
            (f : list char -> N -> list char ->
                 list (PB_Message_denote PhoneNumber) ->
@@ -68,12 +89,20 @@ Definition AddressBook : PB_Message :=
       (Build_PB_Field (PB_Repeated (PB_Embedded Person)) "people" 1)
     ].
 
+Definition AddressBook_construct
+           (people : list (PB_Message_denote Person)) : PB_Message_denote AddressBook :=
+  <"people" :: people>.
+
 Definition AddressBook_destruct {A}
            (f : list (PB_Message_denote Person) -> A)
            (msg : PB_Message_denote AddressBook) :=
   f msg!"people".
 
 (* :TODO: generalize this and move to extraction.v *)
+Definition AddressBook_encode msg :=
+  let (bs, _) := PB_Message_encode AddressBook msg in
+  bs.
+
 Definition AddressBook_decode bs :=
   match PB_Message_decode AddressBook bs () with
   | Some (msg, _, _) => Some msg
@@ -138,4 +167,9 @@ Extraction "addressbook"
            PhoneNumber_destruct
            Person_destruct
            AddressBook_destruct
+           Timestamp_construct
+           PhoneNumber_construct
+           Person_construct
+           AddressBook_construct
+           AddressBook_encode
            AddressBook_decode.

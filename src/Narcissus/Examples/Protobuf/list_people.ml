@@ -7,12 +7,12 @@ let list_of_string s =
 let list_to_string l =
   Batteries.String.of_list (List.map (fun x -> char_of_int (Int64.to_int x)) l)
 
-let byteString_of_bytes bs =
-  let n = Bytes.length bs in
-  build_aligned_ByteString n (of_list (list_of_string (Bytes.to_string bs)))
+let byteString_of_bytes bytes =
+  let n = Bytes.length bytes in
+  build_aligned_ByteString n (of_list (list_of_string (Bytes.to_string bytes)))
 
 let bytes =
-  let ic = open_in Sys.argv.(1) in
+  let ic = open_in_bin Sys.argv.(1) in
   let len = in_channel_length ic in
   let b = Bytes.create len in
   really_input ic b 0 len;
