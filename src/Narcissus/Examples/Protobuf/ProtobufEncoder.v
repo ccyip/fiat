@@ -17,7 +17,6 @@ Require Import
         Fiat.Common.DecideableEnsembles
         Fiat.Common.EnumType
         Fiat.Common.ilist2
-        Fiat.Common.Tactics.CacheStringConstant
         Fiat.Common.IterateBoundedIndex
         Fiat.Computation
         Fiat.Computation.FixComp
@@ -41,6 +40,7 @@ Require Import
         Fiat.Narcissus.Formats.EnumOpt
         Fiat.Narcissus.Formats.SumTypeOpt
         Fiat.Narcissus.Formats.VarintOpt
+        Fiat.Narcissus.Formats.WordLEOpt
         Fiat.Narcissus.Formats.StringOpt
         Fiat.Narcissus.Stores.EmptyStore
         Fiat.Narcissus.Automation.Solver
@@ -249,6 +249,36 @@ Proof.
   apply (proj2_sig (PB_LengthDelimited_encode'' A_OK A_format)).
 Qed.
 
+Fixpoint WordLE_encode {n} : word (8*n) -> Vector.t char n.
+Proof.
+  destruct n; intros w.
+  - exact (Vector.nil _).
+  - replace (8 * S n) with (8 + (8 * n)) in w by abstract omega.
+    exact (Vector.cons _ (split1 8 _ w) _ (WordLE_encode _ (split2 8 _ w))).
+Defined.
+
+Lemma WordLE_encode_correct {n}
+  : forall (w : word (8*n)) (ce : CacheFormat),
+    refine (format_wordLE w ce)
+           (ret ((fun w ce => (build_aligned_ByteString (WordLE_encode w), ce)) w ce)).
+Proof.
+  induction n; intros.
+  simpl in *. unfold format_wordLE.
+  shatter_word w.
+  unfold format_word. simpl.
+  f_equiv. f_equal.
+  eapply ByteString_f_equal; simpl.
+  instantiate (1 := eq_refl _). reflexivity.
+  instantiate (1 := eq_refl _). reflexivity.
+  unfold WordLE_encode.
+  generalize (WordLE_encode_subproof n). destruct e.
+  set (8*n) as n'.
+  etransitivity.
+  eapply AlignedFormatChar.
+  apply IHn.
+  reflexivity.
+Qed.
+
 Definition PB_WireType_encode' (wty : PB_WireType)
   : {impl : _ |
      forall (x : PB_WireType_denote wty) (ce : CacheFormat),
@@ -262,18 +292,12 @@ Proof.
   intros. unfold PB_WireType_format.
   destruct wty; simpl in *.
   apply Varint_encode_correct.
-  rewrite <- refineEquiv_DoneC.
-  etransitivity. apply AlignedFormat32Char; auto.
-  simpl. apply refineEquiv_mempty_vector.
+  etransitivity.
+  apply (WordLE_encode_correct (n := 4)).
   higher_order_reflexivity.
   etransitivity.
-  erewrite (format_words _ (n:=32) x).
-  apply AlignedFormat32Char; auto.
-  rewrite <- refineEquiv_DoneC.
-  apply AlignedFormat32Char; auto.
-  simpl. apply refineEquiv_mempty_vector.
+  apply (WordLE_encode_correct (n := 8)).
   higher_order_reflexivity.
-
   unfold PB_LengthDelimited_format.
   etransitivity.
   unfold Bind2. rewrite SizedList_format_eq_format_list.
@@ -287,9 +311,6 @@ Proof.
 
   simpl. simplify with monad laws.
   higher_order_reflexivity.
-
-  Grab Existential Variables.
-  auto.
 Defined.
 
 Definition PB_WireType_encode_correct (wty : PB_WireType)

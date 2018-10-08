@@ -17,7 +17,7 @@ Require Import
         Fiat.Common.DecideableEnsembles
         Fiat.Common.EnumType
         Fiat.Common.ilist2
-        Fiat.Common.Tactics.CacheStringConstant
+        (* Fiat.Common.Tactics.CacheStringConstant *)
         Fiat.Common.IterateBoundedIndex
         Fiat.Computation
         Fiat.Computation.FixComp
@@ -39,6 +39,7 @@ Require Import
         Fiat.Narcissus.Formats.EnumOpt
         Fiat.Narcissus.Formats.SumTypeOpt
         Fiat.Narcissus.Formats.VarintOpt
+        Fiat.Narcissus.Formats.WordLEOpt
         Fiat.Narcissus.Formats.StringOpt
         Fiat.Narcissus.Stores.EmptyStore
         Fiat.Narcissus.Automation.Solver
@@ -51,6 +52,11 @@ Local Arguments NToWord : simpl never.
 Local Arguments wordToN : simpl never.
 Local Arguments pow2 : simpl never.
 Local Arguments weqb : simpl never.
+Arguments split1 : simpl never.
+Arguments split2 : simpl never.
+Arguments combine : simpl never.
+Arguments format_wordLE : simpl never.
+Arguments decode_wordLE : simpl never.
 Local Arguments N.shiftl : simpl never.
 Local Arguments N.shiftr : simpl never.
 Local Arguments N.lor : simpl never.
@@ -132,8 +138,8 @@ Definition PB_WireType_default (wty : PB_WireType) : PB_WireType_denote wty :=
 Definition PB_WireType_format (wty : PB_WireType)
   : FormatM (PB_WireType_denote wty) ByteString :=
   match wty with
-  | PB_32bit => format_word
-  | PB_64bit => format_word
+  | PB_32bit => format_wordLE
+  | PB_64bit => format_wordLE
   | PB_Varint => Varint_format
   | PB_LengthDelimited => PB_LengthDelimited_format format_word
   end.
@@ -157,6 +163,8 @@ Proof.
   intros; destruct wty; simpl;
     repeat decode_step idtac.
   apply Varint_decode_correct; repeat decode_step idtac.
+  apply decode_wordLE_correct; repeat decode_step idtac.
+  apply decode_wordLE_correct; repeat decode_step idtac.
   eapply shrink_format_correct_True; eauto.
   apply PB_LengthDelimited_decode_correct; repeat decode_step idtac.
   apply word_format_sz_eq. intros. eapply word_format_byte; eauto; eauto.
@@ -186,8 +194,8 @@ Proof.
   unfold PB_WireType_format; intros.
   destruct wty.
   eapply Varint_format_sz_eq; eauto.
-  eapply word_format_sz_eq; eauto.
-  eapply word_format_sz_eq; eauto.
+  eapply format_wordLE_sz_eq; eauto.
+  eapply format_wordLE_sz_eq; eauto.
   eapply PB_LengthDelimited_format_sz_eq; eauto.
   eapply word_format_sz_eq; eauto.
 Qed.
@@ -200,8 +208,8 @@ Proof.
   unfold PB_WireType_format.
   destruct wty; intros.
   eapply Varint_format_byte; eauto.
-  eapply word_format_byte; eauto; eauto.
-  eapply word_format_byte; eauto; eauto.
+  eapply format_wordLE_byte; eauto; eauto.
+  eapply format_wordLE_byte; eauto; eauto.
   eapply PB_LengthDelimited_format_byte; eauto.
   intros. eapply word_format_byte; eauto; eauto.
 Qed.
@@ -214,8 +222,8 @@ Proof.
   unfold PB_WireType_format.
   destruct wty; intros.
   apply Varint_format_some in H; eauto.
-  apply format_word_some in H; eauto. omega.
-  apply format_word_some in H; eauto. omega.
+  apply format_wordLE_some in H; eauto.
+  apply format_wordLE_some in H; eauto.
   apply PB_LengthDelimited_format_some in H; eauto.
 Qed.
 
@@ -226,8 +234,8 @@ Theorem PB_WireType_decode_lt (wty : PB_WireType)
 Proof.
   intros. destruct wty; simpl in *.
   eapply Varint_decode_lt; eauto.
-  eapply decode_word_lt; eauto.
-  eapply decode_word_lt; eauto.
+  eapply decode_wordLE_lt; eauto.
+  eapply decode_wordLE_lt; eauto.
   eapply PB_LengthDelimited_decode_lt; eauto.
   eapply decode_word_lt; eauto.
 Qed.
