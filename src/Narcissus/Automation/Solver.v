@@ -5,7 +5,7 @@ Require Import
         Fiat.Common.EnumType
         Fiat.Common.BoundedLookup
         Fiat.Common.ilist
-        Fiat.Common.Tactics.CacheStringConstant
+        (* Fiat.Common.Tactics.CacheStringConstant *)
         Fiat.Common.IterateBoundedIndex
         Fiat.Computation
         Fiat.QueryStructure.Specification.Representation.Notations
@@ -151,7 +151,7 @@ Ltac start_synthesizing_decoder :=
   end;
 
   (* Memoize any string constants *)
-  pose_string_hyps;
+  (* pose_string_hyps; *)
   eapply Start_CorrectDecoderFor; simpl.
 
 Ltac build_fully_determined_type cleanup_tac :=

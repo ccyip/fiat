@@ -28,8 +28,8 @@ Require Import
         Fiat.Narcissus.Formats.FixListOpt
         Fiat.Narcissus.Formats.SumTypeOpt
         Fiat.Narcissus.Formats.DomainNameOpt
-        Fiat.Common.IterateBoundedIndex
-        Fiat.Common.Tactics.CacheStringConstant.
+        Fiat.Common.IterateBoundedIndex.
+        (* Fiat.Common.Tactics.CacheStringConstant. *)
 
 Require Import
         Bedrock.Word.

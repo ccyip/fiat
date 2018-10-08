@@ -21,8 +21,8 @@ Require Import
         Fiat.Narcissus.Formats.AsciiOpt
         Fiat.Narcissus.BinLib.AlignedByteString
         Fiat.Narcissus.BinLib.AlignWord
-        Fiat.Common.IterateBoundedIndex
-        Fiat.Common.Tactics.CacheStringConstant.
+        Fiat.Common.IterateBoundedIndex.
+        (* Fiat.Common.Tactics.CacheStringConstant. *)
 
 Require Import
         Bedrock.Word.
