@@ -862,5 +862,6 @@ Arguments natToWord : simpl never.
 Arguments Guarded_Vector_split : simpl never.
 Arguments Core.append_word : simpl never.
 Arguments proj1_sig /.
+Arguments Varint_split : simpl never.
 Definition PB_Message_encode (desc : PB_Message) :=
   Eval simpl in (proj1_sig (PB_Message_encode' desc)).

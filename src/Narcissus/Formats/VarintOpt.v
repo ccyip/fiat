@@ -108,11 +108,13 @@ Section Varint.
   Context {monoid : Monoid B}.
   Context {monoidUnit : QueueMonoidOpt monoid bool}.
 
+  Definition Varint_split n := N.div_eucl n (2^7).
+
   Definition Varint_format_body
              (format : funType [N : Type; CacheFormat] (B * CacheFormat))
     : funType [N : Type; CacheFormat] (B * CacheFormat) :=
     fun n ce =>
-      let (q, r) := N.div_eucl n (2^7) in
+      let (q, r) := Varint_split n in
       match q with
       | N0 => format_word (NToWord 8 r) ce
       | Npos _ =>
@@ -151,6 +153,7 @@ Section Varint.
     monotonic_function Varint_format_body.
   Proof.
     unfold monotonic_function. simpl. intros.
+    unfold Varint_split. 
     destruct N.div_eucl as [q r] eqn:Hdiv.
     destruct q. reflexivity.
     apply SetoidMorphisms.refine_bind. reflexivity.
@@ -171,6 +174,7 @@ Section Varint.
                     Varint_format Varint_decode P.
   Proof.
     unfold Varint_format, Varint_decode, Varint_format_body, Varint_decode_body.
+    unfold Varint_split.
     eapply fix_format_correct; eauto. apply Varint_format_body_monotone.
     intros _. intros.
     split; intros. {
@@ -320,6 +324,7 @@ Section Varint.
     apply (unroll_LeastFixedPoint Varint_format_body_monotone) in H0.
     apply (unroll_LeastFixedPoint Varint_format_body_monotone) in H1.
     unfold Varint_format_body in *.
+    unfold Varint_split in *.
     destruct N.div_eucl eqn:Hdiv. destruct n. {
       eapply word_format_eq; eauto.
     } {
@@ -347,6 +352,7 @@ Section Varint.
   Proof.
     unfold Varint_format. simpl. intros.
     apply (unroll_LeastFixedPoint Varint_format_body_monotone) in H. simpl in H.
+    unfold Varint_split in *.
     destruct N.div_eucl as [q r]. destruct q.
     eapply format_word_some in H. auto. omega.
     computes_to_inv2.
@@ -391,6 +397,7 @@ Proof.
   induction d using (well_founded_ind N.lt_wf_0); intros.
   apply (unroll_LeastFixedPoint Varint_format_body_monotone) in H0.
   unfold Varint_format_body in *.
+  unfold Varint_split in *.
   destruct N.div_eucl eqn:Hdiv. destruct n. {
     eapply word_format_byte; eauto; try easy.
   } {
@@ -446,18 +453,21 @@ Proof.
   etransitivity.
   - eapply Finish_refining_LeastFixedPoint with (wf_P := N.lt_wf_0);
       unfold Varint_format_body; simpl; intros.
-    + destruct N.div_eucl eqn:?. destruct n; try reflexivity.
+    +
+      unfold Varint_split.
+      destruct N.div_eucl eqn:?. destruct n; try reflexivity.
       apply SetoidMorphisms.refine_bind. reflexivity. intro.
       apply SetoidMorphisms.refine_bind. auto. reflexivity.
     + unfold respectful_hetero; simpl; intros.
       instantiate (1 := fun r y t =>
-                          let q := fst (N.div_eucl r (2^7)) in
-                          let r := snd (N.div_eucl r (2^7)) in
+                          let q := fst (Varint_split r) in
+                          let r := snd (Varint_split r) in
                           match q return ((q > 0)%N -> CacheFormat -> (ByteString * CacheFormat)) -> _ with
                           | N0 => fun _ => _
                           | Npos _ =>
                             fun f => _ (f _)
                           end (fun H => y q _)).
+      unfold Varint_split in *.
       simpl.
       match goal with
       | |- context [fun H' => y ?a (@?b H')] =>
@@ -474,9 +484,11 @@ Proof.
       }
       instantiate (1:=Varint_encode'_subproof _ H).
       generalize (Varint_encode'_subproof r). intros.
+      unfold Varint_split in *.
       destruct N.div_eucl eqn:?.
       simpl in *. destruct n.
-      simpl. apply aligned_format_char_eq.
+      simpl.
+      apply aligned_format_char_eq.
       simpl.
       unfold Bind2.
       rewrite aligned_format_char_eq. simplify with monad laws.
@@ -500,3 +512,5 @@ Lemma Varint_encode_correct
 Proof.
   apply (proj2_sig Varint_encode').
 Qed.
+
+Eval simpl in (proj1_sig Varint_encode').
