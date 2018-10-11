@@ -53,7 +53,8 @@ Extract Constant wand => "(fun _ w w' -> Int64.logand w w')".
 Extract Constant wor => "(fun _ w w' -> Int64.logor w w')".
 Extract Constant wnot => "(fun _ w -> Int64.lognot w)".
 Extract Constant wneg => "(fun _ w w' -> failwith ""Called Wneg"")".
-Extract Constant combine => "(fun _ w w' -> failwith ""Using combine"")".
+(* rethink combine *)
+Extract Constant combine => "(fun s w s' w' -> Int64.logor (Int64.shift_left w' s) w)".
 Extract Constant wordToNat => "(fun _ w -> Int64.to_int w)". (* Not ideal *)
 Extract Constant natToWord => "(fun _ w -> Int64.of_int w)".
 Extract Constant wzero => "(fun _ -> Int64.zero)".
