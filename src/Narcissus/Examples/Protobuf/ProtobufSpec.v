@@ -449,6 +449,32 @@ Qed.
 Definition PB_FieldTag_OK (t : N) :=
   ((1 <= t <= 18999) \/ (20000 <= t <= 536870911))%N.
 
+(* TODO: This should probably be synthesized automatically. *)
+Definition PB_FieldTag_OK_dec (t : N) :=
+  (((N.leb 1 t) && (N.leb t 18999)) || ((N.leb 20000 t) && (N.leb t 536870911)))%bool.
+
+(* Should use reflect here. *)
+Definition PB_FieldTag_OK_true_iff (t : N)
+  : PB_FieldTag_OK_dec t = true <-> (PB_FieldTag_OK t).
+Proof.
+  unfold PB_FieldTag_OK, PB_FieldTag_OK_dec.
+  repeat match goal with
+         | |- context [N.leb ?a ?b] => destruct (N.leb_spec a b)
+         end; simpl; auto; split; auto; intros; try easy; destruct_many;
+    match goal with
+    | H : N.lt ?a ?b, H' : N.le ?b ?a |- _ => apply N.lt_nge in H; easy
+    end.
+Qed.
+
+(* Need abstraction. *)
+Definition PB_FieldTag_OK_false_iff (t : N)
+  : PB_FieldTag_OK_dec t = false <-> ~ (PB_FieldTag_OK t).
+Proof.
+  split; intros. intro. apply PB_FieldTag_OK_true_iff in H0. congruence.
+  destruct PB_FieldTag_OK_dec eqn:?; auto.
+  apply PB_FieldTag_OK_true_iff in Heqb. congruence.
+Qed.
+
 Definition PB_FieldName_OK (n : string) :=
   n <> EmptyString.
 
@@ -899,7 +925,7 @@ Fixpoint PB_IRElm_OK (desc : PB_Message) (elm : PB_IRElm) :=
       end
     | inr tag =>
       match val with
-      | inl (inl _) => True
+      | inl (inl _) => PB_FieldTag_OK (uindex tag)
       | _ => False
       end
     end
@@ -993,8 +1019,10 @@ Section PB_IRElm_body.
             else None
           end
         | inr tag =>
-          `(v, b', cd') <- PB_WireType_decode wty b cd;
-            Some (Build_PB_IRElm t wty (inl (inl v)), b', cd')
+          if PB_FieldTag_OK_dec (uindex tag) then
+            `(v, b', cd') <- PB_WireType_decode wty b cd;
+              Some (Build_PB_IRElm t wty (inl (inl v)), b', cd')
+          else None
         end
       | inright _ => None
       end.
@@ -1056,7 +1084,11 @@ Section PB_IRElm_body.
       } {
         destruct val; [destruct s |]; try easy. injections.
         edestruct PB_WireType_decode_correct as [[? [? [? ?]]] _]; eauto.
-        simpl in *. rewrite H0. simpl. eauto.
+        simpl in *. rewrite H0. simpl.
+        destruct PB_FieldTag_OK_dec eqn:?.
+        eauto.
+        apply PB_FieldTag_OK_false_iff in Heqb0.
+        easy.
       }
     - destruct data as [tag wty val].
       destruct PB_WireType_val_inv eqn:?; [| easy].
@@ -1103,11 +1135,15 @@ Section PB_IRElm_body.
           destruct PB_Message_tagToType; destruct p; injections; try easy.
           intuition. apply (PB_IRElm_OK_equiv p0). intro. rewrite <- in_rev. eauto.
       } {
+        destruct PB_FieldTag_OK_dec eqn:?.
         decode_opt_to_inv.
-        subst. existT_eq_dec; try apply PB_WireType_eq_dec.
+        subst.
+        existT_eq_dec; try apply PB_WireType_eq_dec.
         subst. simpl.
         edestruct PB_WireType_decode_correct as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
-        intuition. eexists _, _. intuition; eauto. rewrite Heqs0. easy.
+        intuition. eexists _, _. intuition; eauto. rewrite Heqs0.
+        apply PB_FieldTag_OK_true_iff in Heqb0. auto.
+        easy.
       }
   Qed.
 
@@ -1450,103 +1486,6 @@ Proof.
   omega.
 Qed.
 
-Inductive PB_IR_refine_ref
-  : forall {desc : PB_Message}, PB_IR -> PB_Message_denote desc -> Prop :=
-| PB_IR_nil_ref desc :
-    PB_IR_refine_ref nil
-                 (PB_Message_default desc)
-| PB_IR_singular_ref desc :
-    forall ir (msg : PB_Message_denote desc),
-      PB_IR_refine_ref ir msg ->
-      forall (t : BoundedTag desc) (pty : PB_PrimitiveType)
-        (pf : PB_Message_tagToType t = PB_Singular (PB_Primitive pty))
-        (v : PB_Type_denote (PB_Singular (PB_Primitive pty))),
-        PB_IR_refine_ref ((Build_PB_IRElm (bindex t)
-                                      (PB_PrimitiveType_toWireType pty)
-                                      (inl (inl v))) :: ir)
-                     (PB_Message_update msg t (eq_rect_r _ v pf))
-| PB_IR_repeated_cons_ref desc :
-    forall ir (msg : PB_Message_denote desc),
-      PB_IR_refine_ref ir msg ->
-      forall (t : BoundedTag desc) (pty : PB_PrimitiveType)
-        (pf : PB_Message_tagToType t = PB_Repeated (PB_Primitive pty))
-        (v : PB_Type_denote (PB_Singular (PB_Primitive pty))),
-        PB_IR_refine_ref ((Build_PB_IRElm (bindex t)
-                                      (PB_PrimitiveType_toWireType pty)
-                                      (inl (inl v))) :: ir)
-                     (PB_Message_update msg t
-                                        (eq_rect_r
-                                           _
-                                           ((eq_rect _ _ (PB_Message_lookup msg t) _ pf) ++ [v])
-                                           pf))
-| PB_IR_repeated_app_ref desc :
-    forall ir (msg : PB_Message_denote desc),
-      PB_IR_refine_ref ir msg ->
-      forall (t : BoundedTag desc) (pty : PB_PrimitiveType)
-        (pf : PB_Message_tagToType t = PB_Repeated (PB_Primitive pty))
-        (v : PB_Type_denote (PB_Repeated (PB_Primitive pty))),
-        PB_PrimitiveType_toWireType pty <> PB_LengthDelimited ->
-        PB_IR_refine_ref ((Build_PB_IRElm (bindex t)
-                                      (PB_PrimitiveType_toWireType pty)
-                                      (inl (inr v))) :: ir)
-                     (PB_Message_update msg t
-                                        (eq_rect_r
-                                           _
-                                           ((eq_rect _ _ (PB_Message_lookup msg t) _ pf) ++ v)
-                                           pf))
-| PB_IR_unknown_ref desc :
-    forall ir (msg : PB_Message_denote desc),
-      PB_IR_refine_ref ir msg ->
-      forall (t : UnboundedTag desc) (wty : PB_WireType)
-        (v : PB_WireType_denote wty),
-        PB_IR_refine_ref ((Build_PB_IRElm (uindex t)
-                                      wty
-                                      (inl (inl v))) :: ir)
-                     msg
-| PB_IR_embedded_none_ref desc :
-    forall ir (msg : PB_Message_denote desc),
-      PB_IR_refine_ref ir msg ->
-      forall (t : BoundedTag desc) (desc' : PB_Message)
-        (pf : PB_Message_tagToType t = PB_Singular (PB_Embedded desc'))
-        v (msg' : PB_Message_denote desc'),
-        eq_rect _ _ (PB_Message_lookup msg t) _ pf = None ->
-        PB_IR_refine_ref v msg' ->
-        PB_IR_refine_ref ((Build_PB_IRElm (bindex t)
-                                      PB_LengthDelimited
-                                      (inr v)) :: ir)
-                     (PB_Message_update msg t
-                                        (eq_rect_r _ (Some msg') pf))
-| PB_IR_embedded_some_ref desc :
-    forall ir (msg : PB_Message_denote desc),
-      PB_IR_refine_ref ir msg ->
-      forall (t : BoundedTag desc) (desc' : PB_Message)
-        (pf : PB_Message_tagToType t = PB_Singular (PB_Embedded desc'))
-        v ir' (msg' msg'' : PB_Message_denote desc'),
-        eq_rect _ _ (PB_Message_lookup msg t) _ pf = Some msg'' ->
-        PB_IR_refine_ref ir' msg'' ->
-        PB_IR_refine_ref (v ++ ir') msg' ->
-        PB_IR_refine_ref ((Build_PB_IRElm (bindex t)
-                                      PB_LengthDelimited
-                                      (inr v)) :: ir)
-                     (PB_Message_update msg t
-                                        (eq_rect_r _ (Some msg') pf))
-| PB_IR_repeated_embedded_ref desc :
-    forall ir (msg : PB_Message_denote desc),
-      PB_IR_refine_ref ir msg ->
-      forall (t : BoundedTag desc) (desc' : PB_Message)
-        (pf : PB_Message_tagToType t = PB_Repeated (PB_Embedded desc'))
-        v (msg' : PB_Message_denote desc'),
-        PB_IR_refine_ref v msg' ->
-        PB_IR_refine_ref ((Build_PB_IRElm (bindex t)
-                                      PB_LengthDelimited
-                                      (inr v)) :: ir)
-                     (PB_Message_update msg t
-                                        (eq_rect_r
-                                           _
-                                           ((eq_rect _ _ (PB_Message_lookup msg t) _ pf) ++ [msg'])
-                                           pf))
-.
-
 Inductive PB_IR_refine
   : forall {desc : PB_Message}, PB_Message_denote desc -> PB_IR -> PB_Message_denote desc -> Prop :=
 | PB_IR_nil desc :
@@ -1598,6 +1537,7 @@ Inductive PB_IR_refine
       PB_IR_refine msg' ir msg ->
       forall (t : UnboundedTag desc) (wty : PB_WireType)
         (v : PB_WireType_denote wty),
+        PB_FieldTag_OK (uindex t) ->
         PB_IR_refine msg'
                      ((Build_PB_IRElm (uindex t)
                                       wty
@@ -1716,55 +1656,6 @@ Proof.
   }
 Qed.
 
-(* Theorem PB_IR_refine_eq' *)
-(*   : forall desc, *)
-(*     PB_Message_OK desc -> *)
-(*     forall ir ir' (msg msg' : PB_Message_denote desc), *)
-(*       PB_IR_refine_ref ir' msg' -> *)
-(*       PB_IR_refine msg' ir msg -> *)
-(*       PB_IR_refine_ref (ir ++ ir') msg. *)
-(* Proof. *)
-(*   intros. *)
-(*   generalize dependent ir'. *)
-(*   induction H1; intros; simpl. *)
-(*   - auto. *)
-(*   - constructor; eauto. *)
-(*   - constructor; eauto. *)
-(*   - constructor; eauto. *)
-(*   - constructor; eauto. *)
-(*   - constructor; eauto using PB_Message_OK_sub_tagToType. *)
-(*     replace v with (v++nil) by apply app_nil_r. *)
-(*     eapply IHPB_IR_refine2; eauto using PB_Message_OK_sub_tagToType. *)
-(*     constructor. *)
-(*   - admit. *)
-(*     (* eapply PB_IR_embedded_some_ref; eauto using PB_Message_OK_sub_tagToType. *) *)
-(*   - constructor; eauto using PB_Message_OK_sub_tagToType. *)
-(*     replace v with (v++nil) by apply app_nil_r. *)
-(*     eapply IHPB_IR_refine2; eauto using PB_Message_OK_sub_tagToType. *)
-(*     constructor. *)
-(* Qed. *)
-
-(* Theorem PB_IR_refine_eq *)
-(*   : forall desc, *)
-(*     PB_Message_OK desc -> *)
-(*     forall ir (msg : PB_Message_denote desc), *)
-(*       PB_IR_refine_ref ir msg <-> PB_IR_refine (PB_Message_default desc) ir msg. *)
-(* Proof. *)
-(*   intros. split. { *)
-(*     induction 1; *)
-(*       match goal with *)
-(*       | H : _ = Some _ |- _ => eapply PB_IR_embedded_some; eauto *)
-(*       | _ => constructor *)
-(*       end; eauto using PB_Message_OK_sub_tagToType. *)
-(*     eapply PB_IR_refine_trans; eauto using PB_Message_OK_sub_tagToType. *)
-(*   } { *)
-(*     intros. *)
-(*     replace ir with (ir ++ nil) by apply app_nil_r. *)
-(*     eapply PB_IR_refine_eq'; eauto. *)
-(*     constructor. *)
-(*   } *)
-(* Qed. *)
-
 Definition PB_Message_IR_format_body
            (format : funType_dep [PB_Message_denote; PB_Message_denote; fun _ => CacheFormat]
                                  (PB_IR * CacheFormat))
@@ -1814,6 +1705,7 @@ Definition PB_Message_IR_format_body
     (* unknown *)
     (exists ir1 (t : UnboundedTag desc) wty (v : PB_WireType_denote wty) ce1 ce2,
         format _ msg' msg ce1 (ir1, ce2) /\
+        PB_FieldTag_OK (uindex t) /\
         ir = (Build_PB_IRElm (uindex t)
                              wty
                              (inl (inl v))) :: ir1) \/
@@ -1997,11 +1889,13 @@ Definition PB_Message_IR_decode_body
             | _ => None
             end
         end (PB_Message_update msg1 tag) (PB_Message_lookup msg1 tag)
-    | inr _ =>
-      match v with
-      | inl (inl _) => decode desc msg ir' cd
-      | _ => None
-      end
+    | inr tag =>
+      if PB_FieldTag_OK_dec (uindex tag) then
+        match v with
+        | inl (inl _) => decode desc msg ir' cd
+        | _ => None
+        end
+      else None
     end
   end.
 
@@ -2034,10 +1928,13 @@ Proof.
             | H : PB_Message_boundedTag _ (bindex _) = inr _ |- _ =>
               exfalso; eapply PB_Message_boundedTag_notr; eauto
             end;
-        apply PB_Message_boundedTag_correct in Hb;
-        apply BoundedTag_inj in Hb; auto; subst;
-          rewrite pf; intuition;
-            apply PB_IRElm_OK_equiv in IHPB_IR_refine2; eauto using PB_Message_OK_sub_tagToType.
+        try (apply PB_Message_boundedTag_correct in Hb;
+             apply BoundedTag_inj in Hb; auto; subst;
+             rewrite pf; intuition;
+             apply PB_IRElm_OK_equiv in IHPB_IR_refine2; eauto using PB_Message_OK_sub_tagToType).
+  apply PB_Message_boundedTag_correct' in Hb.
+  destruct u, t.
+  simpl in Hb. subst. auto.
 Qed.
 
 Lemma PB_Message_IR_decode_nil' (desc : PB_Message)
@@ -2057,6 +1954,7 @@ Proof.
     destruct PB_WireType_eq_dec; injections; try easy.
     destruct lookup; decode_opt_to_inv; easy.
   } {
+    destruct PB_FieldTag_OK_dec eqn:?; try easy.
     repeat destruct s; try easy.
     eapply IHn; eauto.
   }
@@ -2143,7 +2041,12 @@ Proof.
       destruct PB_Message_boundedTag eqn:Heq. {
         exfalso. eapply PB_Message_boundedTag_notl; eauto.
       } {
-        eexists. repeat split; intros; eauto.
+        eexists.
+        destruct PB_FieldTag_OK_dec eqn:?.
+        repeat split; intros; eauto.
+        apply PB_FieldTag_OK_false_iff in Heqb.
+        apply PB_Message_boundedTag_correct' in Heq.
+        destruct u, x0. simpl in Heq. subst. easy.
       }
     } {
       eapply H in H4; eauto. 2 : omega. destruct_many.
@@ -2340,6 +2243,7 @@ Proof.
         }
       } {
         apply PB_Message_boundedTag_correct' in Heq. subst.
+        destruct PB_FieldTag_OK_dec eqn:?; try easy.
         repeat destruct s; try easy.
         pose proof H4 as Hnil. apply PB_Message_IR_decode_nil' in Hnil. subst.
         eapply H in H4; eauto using PB_IR_measure_cons_lt. 2 : omega. destruct_many.
@@ -2347,7 +2251,7 @@ Proof.
         eexists _, _. repeat split; eauto.
         2 : rewrite app_nil_r; reflexivity.
         choose_br 4.
-        repeat eexists; eauto.
+        repeat eexists; eauto. apply PB_FieldTag_OK_true_iff in Heqb0. auto.
       }
     }
   }
@@ -2361,6 +2265,7 @@ Proof.
   destruct PB_Message_tagToType; intros;
     destruct p; destruct PB_WireType_eq_dec; destruct s; eauto;
       destruct lookup; decode_opt_to_inv; apply H in H1; rewrite H1; eauto.
+  destruct PB_FieldTag_OK_dec eqn:?; try easy.
   destruct s; eauto. destruct s; eauto.
 
   Grab Existential Variables. all : auto.
@@ -2381,8 +2286,7 @@ Qed.
 Definition PB_Message_format (desc : PB_Message)
   : FormatM (PB_Message_denote desc) ByteString :=
   (fun msg ce =>
-     `(ir, _) <- PB_Message_IR_format desc msg ce;
-       SizedList_format PB_IRElm_format (rev ir) ce)%comp.
+     `(ir, _) <- PB_Message_IR_format desc msg ce; SizedList_format PB_IRElm_format (rev ir) ce)%comp.
 
 Definition PB_Message_decode (desc : PB_Message)
   : DecodeM (PB_Message_denote desc) ByteString :=
