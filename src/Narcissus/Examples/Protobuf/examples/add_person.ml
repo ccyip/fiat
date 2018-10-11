@@ -11,7 +11,7 @@ let byteString_of_bytes bytes =
   let n = Bytes.length bytes in
   build_aligned_ByteString n (of_list (list_of_string (Bytes.to_string bytes)))
 
-let bytestring_to_bytes bs =
+let byteString_to_bytes bs =
   Bytes.of_string (list_to_string (to_list (numBytes bs) (byteString0 bs)))
 
 let bytes =
@@ -62,7 +62,7 @@ let () =
   match ab with
   | Some ab ->
     let bs = addressBook_encode (addressBook_construct (ab@[read_person])) in
-    let bytes = bytestring_to_bytes bs in
+    let bytes = byteString_to_bytes bs in
     let oc = open_out_bin Sys.argv.(1) in
     output_bytes oc bytes;
     close_out oc
