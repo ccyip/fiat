@@ -1,43 +1,44 @@
 Require Import
-        Coq.ZArith.BinInt
+        NArith
         ExtrOcamlBasic
         ExtrOcamlNatInt
-        (* ExtrOcamlZInt *)
         ExtrOcamlString.
 
 Require Import
-        (* Fiat.Computation *)
         Fiat.QueryStructure.Specification.Representation.Notations
         Fiat.QueryStructure.Specification.Representation.Heading
         Fiat.QueryStructure.Specification.Representation.Tuple
         Fiat.Narcissus.Common.Specs
         Fiat.Narcissus.Common.WordFacts
-        (* Fiat.Narcissus.Common.ComposeIf *)
-        (* Fiat.Narcissus.Common.ComposeOpt *)
-        (* Fiat.Narcissus.Automation.Solver *)
         Fiat.Narcissus.BinLib.Core
-        (* Fiat.Narcissus.BinLib.AlignedByteString *)
-        (* Fiat.Narcissus.BinLib.AlignWord *)
-        (* Fiat.Narcissus.BinLib.AlignedList *)
-        (* Fiat.Narcissus.BinLib.AlignedDecoders *)
         Fiat.Narcissus.BinLib.AlignedMonads
         Fiat.Narcissus.Formats.WordOpt
         Fiat.Narcissus.Formats.VarintOpt
-        Fiat.Narcissus.Stores.EmptyStore
+        Fiat.Narcissus.Stores.EmptyStore.
+
+Require Export
         Fiat.Narcissus.Examples.Protobuf.ProtobufSpec
         Fiat.Narcissus.Examples.Protobuf.ProtobufEncoder.
-
-Require Import NArith NArithRing.
 
 Definition PB_Message_encode_impl desc (msg : PB_Message_denote desc) :=
   let (bs, _) := PB_Message_encode desc msg in
   bs.
 
 Definition PB_Message_decode_impl desc bs :=
-  match PB_Message_decode desc bs () with
+  match PB_Message_decode desc bs tt with
   | Some (msg, _, _) => Some msg
   | None => None
   end.
+
+Notation "( ty , name , tag )" :=
+  (Build_PB_Field ty name tag)
+  : Protobuf_scope.
+
+Notation "[ fld1 ; .. ; fldn ]" :=
+  (Build_PB_Message (@Vector.cons _ fld1 _ .. (Vector.cons _ fldn _ (Vector.nil _)) ..))
+  : Protobuf_scope.
+
+Delimit Scope Protobuf_scope with protobuf.
 
 Extraction Inline DecodeBindOpt2.
 Extraction Inline If_Opt_Then_Else.
