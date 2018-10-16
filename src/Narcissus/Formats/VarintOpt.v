@@ -20,6 +20,7 @@ Import FixComp.LeastFixedPointFun.
 Local Open Scope N.
 Local Open Scope comp_scope.
 
+(* Lemmas for N arithmetic. *)
 Lemma div_eucl_mod
   : forall a b q r, N.div_eucl a b = (q, r) -> r = a mod b.
 Proof.
@@ -419,30 +420,6 @@ Require Import
         Fiat.Computation.SetoidMorphisms
         Fiat.Narcissus.BinLib.AlignWord
         Fiat.Computation.SetoidMorphisms.
-
-Definition Varint_encode_ref : N -> CacheFormat -> (ByteString * CacheFormat).
-Proof.
-  refine
-    (Fix N.lt_wf_0 _
-         (fun n rec ce =>
-            let q := fst (N.div_eucl n (2^7)) in
-            let r := snd (N.div_eucl n (2^7)) in
-            match q return (q > 0 -> CacheFormat -> (ByteString * CacheFormat)) -> _ with
-            | N0 => fun _ => encode_word (NToWord 8 r) ce
-            | Npos _ =>
-              fun f =>
-              let r' := r + (2^7) in
-              let (b1, ce1) := encode_word (NToWord 8 r') ce in
-              let (b2, ce2) := (f _) ce1 in
-              (mappend b1 b2, ce2)
-            end (fun H => rec q _)
-    )%N).
-  easy.
-  apply (div_eucl_div_lt n (2 ^ 7) q r); subst q r.
-  now destruct n.
-  easy.
-  destruct N.div_eucl. easy.
-Defined.
 
 Arguments CacheFormat : simpl never.
 Definition Varint_encode'
