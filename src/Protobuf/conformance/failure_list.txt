@@ -9,3 +9,7 @@ Recommended.Proto3.ProtobufInput.OneofZeroString.ProtobufOutput
 Recommended.Proto3.ProtobufInput.OneofZeroUint32.ProtobufOutput
 Recommended.Proto3.ProtobufInput.OneofZeroUint64.ProtobufOutput
 Required.Proto3.ProtobufInput.UnknownVarint.ProtobufOutput
+Required.Proto3.ProtobufInput.RepeatedScalarSelectsLast.INT32.ProtobufOutput
+Required.Proto3.ProtobufInput.RepeatedScalarSelectsLast.UINT32.ProtobufOutput
+Required.Proto3.ProtobufInput.ValidDataRepeated.INT32.ProtobufOutput
+Required.Proto3.ProtobufInput.ValidDataRepeated.UINT32.ProtobufOutput
