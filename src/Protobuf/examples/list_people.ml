@@ -20,8 +20,9 @@ let bytes =
   b
 
 let print_timestamp seconds nanos =
-  (* :TODO: pretty print *)
-  printf "(%Ld, %Ld)" seconds nanos
+  let t = Core.Time.of_span_since_epoch (Core.Time.Span.create ~sec:(Int64.to_int seconds)
+                                           ~ns:(Int64.to_int nanos) ()) in
+  printf "%s" (Core.Time.format t "%Y-%m-%dT%H:%M:%SZ" Core.Time.Zone.utc)
 
 let print_last_updated msg =
   match msg with
@@ -32,13 +33,17 @@ let print_last_updated msg =
   | None -> ()
 
 let print_phone_type ty =
-  (* :TODO: pretty print *)
-  printf "%Ld phone" ty
+  let s = (match Int64.to_int ty with
+      | 0 -> "Mobile"
+      | 1 -> "Home"
+      | 2 -> "Work"
+      | _ -> "Unknown") in
+  printf "%s phone" s
 
 let print_phone pn ty =
   printf "  ";
   print_phone_type ty;
-  printf "#: %s\n" (list_to_string pn)
+  printf " #: %s\n" (list_to_string pn)
 
 let print_person name id email phones last_updated =
   printf "Person ID: %Ld\n" id;

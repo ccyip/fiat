@@ -38,9 +38,14 @@ let rec read_phones () =
   printf "Enter a phone number (or leave blank to finish): ";
   let phone = String.trim (read_line ()) in
   if String.length phone > 0 then
-    (printf "Enter phone type: ";
-     let ptype = Int64.of_int (read_int ()) in
-     (phoneNumber_construct (list_of_string phone) ptype) :: read_phones ())
+    (printf "Is this a mobile, home or work phone? ";
+     let ty = Int64.of_int
+         (match read_line () with
+          | "mobile" -> 0
+          | "home" -> 1
+          | "work" -> 2
+          | _ -> printf "Unknown phone type. Using default.\n"; 0) in
+     (phoneNumber_construct (list_of_string phone) ty) :: read_phones ())
   else []
 
 let read_timestamp =
