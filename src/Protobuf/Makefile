@@ -1,0 +1,4 @@
+protobuf-all:
+
+%:
+	@cd ../..; make $@
