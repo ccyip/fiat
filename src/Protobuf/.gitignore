@@ -1,0 +1,6 @@
+/examples/add_person
+/examples/list_people
+/examples/addressbook.ml*
+/conformance/testall.ml*
+/conformance/conformance
+__pycache__
