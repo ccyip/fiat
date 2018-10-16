@@ -1,6 +1,6 @@
 Require Import
         Fiat.Narcissus.BinLib.AlignedByteString
-        Fiat.Narcissus.Examples.Protobuf.ProtobufExtract.
+        Fiat.Protobuf.ProtobufExtract.
 
 Open Scope Protobuf_scope.
 

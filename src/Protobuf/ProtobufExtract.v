@@ -17,8 +17,8 @@ Require Import
         Fiat.Narcissus.Stores.EmptyStore.
 
 Require Export
-        Fiat.Narcissus.Examples.Protobuf.ProtobufSpec
-        Fiat.Narcissus.Examples.Protobuf.ProtobufEncoder.
+        Fiat.Protobuf.ProtobufSpec
+        Fiat.Protobuf.ProtobufEncoder.
 
 Definition PB_Message_encode_impl desc (msg : PB_Message_denote desc) :=
   let (bs, _) := PB_Message_encode desc msg in

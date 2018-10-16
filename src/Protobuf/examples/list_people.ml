@@ -21,7 +21,7 @@ let bytes =
 
 let print_timestamp seconds nanos =
   (* :TODO: pretty print *)
-  printf "(%d, %d)" seconds nanos
+  printf "(%Ld, %Ld)" seconds nanos
 
 let print_last_updated msg =
   match msg with
@@ -33,7 +33,7 @@ let print_last_updated msg =
 
 let print_phone_type ty =
   (* :TODO: pretty print *)
-  printf "%d phone" ty
+  printf "%Ld phone" ty
 
 let print_phone pn ty =
   printf "  ";
@@ -41,7 +41,7 @@ let print_phone pn ty =
   printf "#: %s\n" (list_to_string pn)
 
 let print_person name id email phones last_updated =
-  printf "Person ID: %d\n" id;
+  printf "Person ID: %Ld\n" id;
   printf "  Name: %s\n" (list_to_string name);
   if List.length email > 0 then printf "  E-mail address: %s\n" (list_to_string email);
   List.iter (fun p -> phoneNumber_destruct print_phone p) phones;

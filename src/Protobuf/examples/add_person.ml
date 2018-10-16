@@ -39,17 +39,17 @@ let rec read_phones () =
   let phone = String.trim (read_line ()) in
   if String.length phone > 0 then
     (printf "Enter phone type: ";
-     let ptype = read_int () in
+     let ptype = Int64.of_int (read_int ()) in
      (phoneNumber_construct (list_of_string phone) ptype) :: read_phones ())
   else []
 
 let read_timestamp =
   (* Precision is only in seconds. *)
-  timestamp_construct (int_of_float (Unix.time ())) 0
+  timestamp_construct (Int64.of_float (Unix.time ())) 0L
 
 let read_person =
   printf "Enter person ID number: ";
-  let id = read_int () in
+  let id = Int64.of_int (read_int ()) in
   printf "Enter name: ";
   let name = String.trim (read_line ()) in
   printf "Enter email address (blank for none): ";

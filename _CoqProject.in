@@ -1,5 +1,8 @@
+-R Bedrock Bedrock
 -R src Fiat
 -I src/Common/Tactics
+Bedrock/Word.v
+Bedrock/Nomega.v
 src/ADT.v
 src/ADTInduction.v
 src/ADTNotation.v
@@ -339,11 +342,6 @@ src/Narcissus/Examples/ICMP_Packet.v
 src/Narcissus/Examples/IntExample.v
 src/Narcissus/Examples/Toy.v
 src/Narcissus/Examples/Toy2.v
-src/Narcissus/Examples/Protobuf/ProtobufLengthDelimited.v
-src/Narcissus/Examples/Protobuf/ProtobufSpec.v
-src/Narcissus/Examples/Protobuf/ProtobufEncoder.v
-src/Narcissus/Examples/Protobuf/ProtobufExample.v
-src/Narcissus/Examples/Protobuf/AlignedProtobufDecoder.v
 src/Narcissus/Examples/BRASS/Telemetry.v
 src/Narcissus/Examples/DNS/DNSPacket.v
 src/Narcissus/Examples/DNS/DnsOpt.v
@@ -664,3 +662,9 @@ src/Common/Tactics/hint_db_extra_tactics.ml
 src/Common/Tactics/transparent_abstract_plugin.ml4
 src/Common/Tactics/transparent_abstract_plugin.mllib
 src/Common/Tactics/transparent_abstract_tactics.ml
+src/Protobuf/ProtobufLengthDelimited.v
+src/Protobuf/ProtobufSpec.v
+src/Protobuf/ProtobufEncoder.v
+src/Protobuf/ProtobufExtract.v
+src/Protobuf/examples/ProtobufExample.v
+src/Protobuf/conformance/ProtobufConformance.v

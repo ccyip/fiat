@@ -44,8 +44,8 @@ Require Import
         Fiat.Narcissus.Formats.StringOpt
         Fiat.Narcissus.Stores.EmptyStore
         Fiat.Narcissus.Automation.Solver
-        Fiat.Narcissus.Examples.Protobuf.ProtobufLengthDelimited
-        Fiat.Narcissus.Examples.Protobuf.ProtobufSpec.
+        Fiat.Protobuf.ProtobufLengthDelimited
+        Fiat.Protobuf.ProtobufSpec.
 
 Import FixComp.LeastFixedPointFun.
 

@@ -5,7 +5,8 @@ STDTIME?=/usr/bin/time -f "$* (real: %e, user: %U, sys: %S, mem: %M ko)"
 	fiat-quick fiat-core-quick querystructures-quick parsers-quick parsers-examples-quick parsers-examples-verbose-quick parsers-all-quick finitesets-quick dns-quick compiler-quick facade-test-quick ics-quick fiat4monitors-quick examples-quick narcissus-quick \
 	install install-fiat install-fiat-core install-querystructures install-parsers install-parsers-examples install-parsers-examples-verbose install-parsers-all install-finitesets install-dns install-compiler install-ics install-fiat4monitors install-examples install-narcissus \
 	pdf doc clean-doc \
-	test-parsers test-parsers-profile test-parsers-profile-graph
+	test-parsers test-parsers-profile test-parsers-profile-graph \
+	protobuf protobuf-all protobuf-examples protobuf-conformance
 
 ifneq (,$(wildcard .git)) # if we're in a git repo
 
@@ -350,3 +351,50 @@ printdeps::
 
 printreversedeps::
 	$(HIDE)$(foreach vo,$(filter %.vo,$(MAKECMDGOALS)),echo '$(vo): $(call vo_reverse_closure,$(VOFILES),$(vo))'; )
+
+PROTOBUF_VO := \
+	src/Protobuf/ProtobufLengthDelimited.vo \
+	src/Protobuf/ProtobufSpec.vo \
+	src/Protobuf/ProtobufEncoder.vo \
+	src/Protobuf/ProtobufExtract.vo
+
+PROTOBUF_EXAMPLE_VO := \
+	src/Protobuf/examples/ProtobufExample.vo
+
+PROTOBUF_EXAMPLE_ML := \
+	src/Protobuf/examples/addressbook.mli \
+	src/Protobuf/examples/addressbook.ml
+
+PROTOBUF_EXAMPLE_BIN := \
+	src/Protobuf/examples/list_people \
+	src/Protobuf/examples/add_person
+
+PROTOBUF_CONFORMANCE_VO := \
+	src/Protobuf/conformance/ProtobufConformance.vo
+
+PROTOBUF_CONFORMANCE_ML := \
+	src/Protobuf/conformance/testall.mli \
+	src/Protobuf/conformance/testall.ml
+
+PROTOBUF_CONFORMANCE_BIN := \
+	src/Protobuf/conformance/conformance
+
+protobuf: $(PROTOBUF_VO)
+
+$(PROTOBUF_EXAMPLE_ML): $(PROTOBUF_EXAMPLE_VO)
+	@test -f $@ || mv $(notdir $@) $@
+
+$(PROTOBUF_EXAMPLE_BIN): % : $(PROTOBUF_EXAMPLE_ML) %.ml
+	ocamlfind ocamlopt -linkpkg -thread -package core -package batteries -I $(dir $@) -o $@ $^
+
+protobuf-example: $(PROTOBUF_EXAMPLE_BIN)
+
+$(PROTOBUF_CONFORMANCE_ML): $(PROTOBUF_CONFORMANCE_VO)
+	@test -f $@ || mv $(notdir $@) $@
+
+$(PROTOBUF_CONFORMANCE_BIN): % : $(PROTOBUF_CONFORMANCE_ML) %.ml
+	ocamlfind ocamlopt -linkpkg -thread -package core -package batteries -I $(dir $@) -o $@ $^
+
+protobuf-conformance: $(PROTOBUF_CONFORMANCE_BIN)
+
+protobuf-all : protobuf protobuf-example protobuf-conformance
