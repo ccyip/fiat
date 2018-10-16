@@ -382,7 +382,7 @@ PROTOBUF_CONFORMANCE_BIN := \
 protobuf: $(PROTOBUF_VO)
 
 $(PROTOBUF_EXAMPLE_ML): $(PROTOBUF_EXAMPLE_VO)
-	@test -f $@ || mv $(notdir $@) $@
+	@if test -f $(notdir $@); then mv $(notdir $@) $@; fi
 
 $(PROTOBUF_EXAMPLE_BIN): % : $(PROTOBUF_EXAMPLE_ML) %.ml
 	ocamlfind ocamlopt -linkpkg -thread -package core -package batteries -I $(dir $@) -o $@ $^
@@ -390,7 +390,7 @@ $(PROTOBUF_EXAMPLE_BIN): % : $(PROTOBUF_EXAMPLE_ML) %.ml
 protobuf-example: $(PROTOBUF_EXAMPLE_BIN)
 
 $(PROTOBUF_CONFORMANCE_ML): $(PROTOBUF_CONFORMANCE_VO)
-	@test -f $@ || mv $(notdir $@) $@
+	@if test -f $(notdir $@); then mv $(notdir $@) $@; fi
 
 $(PROTOBUF_CONFORMANCE_BIN): % : $(PROTOBUF_CONFORMANCE_ML) %.ml
 	ocamlfind ocamlopt -linkpkg -thread -package core -package batteries -I $(dir $@) -o $@ $^
