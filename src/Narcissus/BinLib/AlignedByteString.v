@@ -1879,3 +1879,19 @@ Fixpoint decode_list'
     rewrite !ByteString_enqueue_ByteString_ByteStringToBoundedByteString.
     rewrite ByteString_enqueue_ByteString_assoc; reflexivity.
   Qed.
+
+
+  Lemma refineEquiv_mempty_vector E
+    : forall e : E,
+      refineEquiv (ret (mempty, e))
+                  (ret (build_aligned_ByteString (Vector.nil _), e)).
+  Proof.
+    simpl.
+    intros; replace ByteString_id
+              with (build_aligned_ByteString (Vector.nil _)).
+    reflexivity.
+    unfold build_aligned_ByteString.
+    unfold ByteString_id.
+    f_equal.
+    apply le_uniqueness_proof.
+  Qed.

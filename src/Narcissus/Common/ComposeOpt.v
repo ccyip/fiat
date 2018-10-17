@@ -68,6 +68,30 @@ Proof.
   eapply refineEquiv_bind; [ apply H | reflexivity ].
 Qed.
 
+Lemma refineEquiv_DoneC E B
+      (monoid : Monoid B)
+      (format : E -> Comp (B * E))
+  : forall ctx,
+    refineEquiv (format DoneC ctx)
+                (format ctx).
+Proof.
+  unfold compose; simpl; intros.
+  split; unfold Bind2; intros v Comp_v.
+  - computes_to_econstructor; eauto; destruct v; simpl.
+    computes_to_econstructor; eauto; simpl.
+    rewrite mempty_right; eauto.
+  -
+    unfold compose, Bind2 in *; computes_to_inv;
+      repeat match goal with
+             | v : _ * _ |- _ => destruct v
+             end;
+      simpl fst in *; simpl snd in *;
+        repeat match goal with
+               | H : (_, _) = (_, _) |- _ => inversion H; clear H; subst
+               end.
+    rewrite mempty_right; eauto.
+Qed.
+
 Lemma compose_format_correct
       {A A' B}
       {cache : Cache}

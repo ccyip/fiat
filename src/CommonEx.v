@@ -22,7 +22,6 @@ Ltac solve_extensionality' f g :=
   replace g with f by solve_by_extensionality;
   auto.
 
-(* :TODO: make it better *)
 Ltac solve_extensionality :=
   intros;
   match goal with

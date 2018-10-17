@@ -228,3 +228,100 @@ Theorem PB_LengthDelimited_format_byte
 Proof.
   intros. eapply PB_LengthDelimited_format_byte'; eauto.
 Qed.
+
+Require Import
+        Fiat.Narcissus.BinLib.Core
+        Fiat.Narcissus.BinLib.AlignedByteString
+        Fiat.Narcissus.BinLib.AlignWord
+        Fiat.Narcissus.BinLib.AlignedList
+        Fiat.Narcissus.BinLib.AlignedDecoders.
+
+Definition PB_LengthDelimited_encode
+           {A}
+           (A_OK : A -> Prop)
+           (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
+  : { impl : _ |
+      forall (A_encode : A -> CacheFormat -> (ByteString * CacheFormat))
+        (As : list A)
+        (ce : CacheFormat),
+        (forall a ce,
+             A_OK a
+             -> refine (A_format a ce)
+                      (ret (A_encode a ce))) ->
+        (forall a, In a As -> A_OK a) ->
+        refine (PB_LengthDelimited_format A_format As ce)
+               (ret (impl A_encode As ce)) }.
+Proof.
+  eexists. intros.
+  unfold PB_LengthDelimited_format.
+  unfold Bind2. rewrite SizedList_format_eq_format_list.
+  rewrite naive_format_list.
+  simplify with monad laws.
+  simpl_rewrite (proj2_sig Varint_encode').
+  simplify with monad laws.
+  higher_order_reflexivity.
+  all : eauto.
+Defined.
+
+Lemma PB_LengthDelimited_encode_correct
+      {A}
+      (A_OK : A -> Prop)
+      (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
+  : forall (A_encode : A -> CacheFormat -> (ByteString * CacheFormat))
+      (As : list A)
+      (ce : CacheFormat),
+    (forall a ce,
+        A_OK a
+        -> refine (A_format a ce)
+                 (ret (A_encode a ce))) ->
+    (forall a, In a As -> A_OK a) ->
+    refine (PB_LengthDelimited_format A_format As ce)
+           (ret ((proj1_sig (PB_LengthDelimited_encode A_OK A_format)) A_encode As ce)).
+Proof.
+  apply (proj2_sig (PB_LengthDelimited_encode A_OK A_format)).
+Qed.
+
+Definition PB_LengthDelimited_encode'
+           {A}
+           (A_OK : A -> Prop)
+           (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
+  : { impl : _ |
+      forall (As : list A)
+        (A_encode : forall a : A, In a As -> CacheFormat -> (ByteString * CacheFormat))
+        (ce : CacheFormat),
+        (forall a pf ce,
+            A_OK a
+            -> refine (A_format a ce)
+                     (ret (A_encode a pf ce))) ->
+        (forall a, In a As -> A_OK a) ->
+        refine (PB_LengthDelimited_format A_format As ce)
+               (ret (impl As A_encode ce))}.
+Proof.
+  eexists. intros.
+  unfold PB_LengthDelimited_format.
+  unfold Bind2. rewrite SizedList_format_eq_format_list.
+  rewrite naive_format_list'.
+  simplify with monad laws.
+  simpl_rewrite (proj2_sig Varint_encode').
+  simplify with monad laws.
+  higher_order_reflexivity.
+  all : eauto.
+Defined.
+
+Lemma PB_LengthDelimited_encode_correct'
+      {A}
+      (A_OK : A -> Prop)
+      (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
+  : forall (As : list A)
+      (A_encode : forall a : A, In a As -> CacheFormat -> (ByteString * CacheFormat))
+      (ce : CacheFormat),
+    (forall a pf ce,
+        A_OK a
+        -> refine (A_format a ce)
+                 (ret (A_encode a pf ce))) ->
+    (forall a, In a As -> A_OK a) ->
+    refine (PB_LengthDelimited_format A_format As ce)
+           (ret ((proj1_sig (PB_LengthDelimited_encode' A_OK A_format)) As A_encode ce)).
+Proof.
+  apply (proj2_sig (PB_LengthDelimited_encode' A_OK A_format)).
+Qed.

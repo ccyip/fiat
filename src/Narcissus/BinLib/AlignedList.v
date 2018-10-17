@@ -266,3 +266,76 @@ Section AlignedList.
   Qed.
 
 End AlignedList.
+
+Lemma naive_format_list
+      {A}
+      (A_OK : A -> Prop)
+      (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
+      (A_encode : A -> CacheFormat -> (ByteString * CacheFormat))
+      (A_format_OK :
+         forall a ce,
+           A_OK a
+           -> refine (A_format a ce)
+                    (ret (A_encode a ce)))
+  : forall (As : list A)
+      (ce : CacheFormat),
+    (forall a, In a As -> A_OK a)
+    -> refine (format_list A_format As ce)
+             (ret (encode_list A_encode As ce)).
+Proof.
+  induction As; intros. easy.
+  simpl.
+  unfold Bind2. rewrite A_format_OK.
+  simplify with monad laws. rewrite IHAs.
+  simplify with monad laws. destruct A_encode, encode_list. reflexivity.
+  all : intuition.
+Qed.
+
+Section encode_list'.
+  Context {A : Type}.
+  Context {B : Type}.
+  Context {monoid : Monoid B}.
+
+  Fixpoint encode_list'
+           (xs0 : list A)
+           (encode_A : forall a : A, In a xs0 -> CacheFormat -> B * CacheFormat)
+           (ce : CacheFormat)
+    : B * CacheFormat.
+    refine
+      (match xs0 return (forall a : A, In a xs0 -> CacheFormat -> B * CacheFormat) -> _ with
+       | nil => fun _ => (mempty, ce)
+       | x :: xs' =>
+         fun encode_A =>
+           let (b1, env1) := encode_A x _ ce in
+           let (b2, env2) := encode_list' xs' (fun a _ ce => encode_A a _ ce) env1 in
+           (mappend b1 b2, env2)
+       end encode_A); abstract intuition.
+  Defined.
+End encode_list'.
+
+Lemma naive_format_list'
+      {A}
+      (A_OK : A -> Prop)
+      (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
+  : forall (As : list A)
+      (A_encode : forall a : A, In a As -> CacheFormat -> (ByteString * CacheFormat))
+      (ce : CacheFormat),
+    (forall a pf ce,
+        A_OK a
+        -> refine (A_format a ce)
+                 (ret (A_encode a pf ce))) ->
+    (forall a, In a As -> A_OK a) ->
+    refine (format_list A_format As ce)
+             (ret (encode_list' As A_encode ce)).
+Proof.
+  induction As; intros. easy.
+  simpl.
+  unfold Bind2. rewrite H.
+  simplify with monad laws. rewrite IHAs.
+  simplify with monad laws.
+  2 : intros; apply H; eauto.
+  2-3 : intuition.
+  destruct A_encode eqn:Heq1. rewrite Heq1.
+  destruct encode_list' eqn:Heq2. rewrite Heq2.
+  reflexivity.
+Qed.

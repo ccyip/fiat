@@ -177,3 +177,38 @@ Proof.
   }
   erewrite <- Nat.mod_add; eauto.
 Qed.
+
+Require Import
+        Fiat.Narcissus.BinLib.Core
+        Fiat.Narcissus.BinLib.AlignedByteString
+        Fiat.Narcissus.BinLib.AlignWord.
+
+Fixpoint WordLE_encode {n} : word (8*n) -> Vector.t char n.
+Proof.
+  destruct n; intros w.
+  - exact (Vector.nil _).
+  - replace (8 * S n) with (8 + (8 * n)) in w by abstract omega.
+    exact (Vector.cons _ (split1 8 _ w) _ (WordLE_encode _ (split2 8 _ w))).
+Defined.
+
+Lemma WordLE_encode_correct {n}
+  : forall (w : word (8*n)) (ce : CacheFormat),
+    refine (format_wordLE w ce)
+           (ret ((fun w ce => (build_aligned_ByteString (WordLE_encode w), ce)) w ce)).
+Proof.
+  induction n; intros.
+  simpl in *. unfold format_wordLE.
+  shatter_word w.
+  unfold format_word. simpl.
+  f_equiv. f_equal.
+  eapply ByteString_f_equal; simpl.
+  instantiate (1 := eq_refl _). reflexivity.
+  instantiate (1 := eq_refl _). reflexivity.
+  unfold WordLE_encode.
+  generalize (WordLE_encode_subproof n). destruct e.
+  set (8*n) as n'.
+  etransitivity.
+  eapply AlignedFormatChar.
+  apply IHn.
+  reflexivity.
+Qed.

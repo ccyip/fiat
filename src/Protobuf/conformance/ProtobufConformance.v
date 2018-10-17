@@ -4,6 +4,7 @@ Require Import
 
 Open Scope Protobuf_scope.
 
+(* The descriptors used in conformance test. *)
 Definition NestedMessage : PB_Descriptor :=
   [(PB_Singular (PB_Base PB_int32), "a", 1)].
 
@@ -60,7 +61,7 @@ Definition TestAllTypesProto3 : PB_Descriptor :=
    (PB_Repeated (PB_Base PB_string), "repeated_string_piece", 54);
    (PB_Repeated (PB_Base PB_string), "repeated_cord", 55)].
 
-Definition testall_encode := PB_Descriptor_encode_impl TestAllTypesProto3.
+Definition testall_encode := PB_Message_encode_impl TestAllTypesProto3.
 
 Definition testall_decode := PB_Message_decode_impl TestAllTypesProto3.
 

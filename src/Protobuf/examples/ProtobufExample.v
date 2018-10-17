@@ -3,6 +3,7 @@ Require Import
 
 Open Scope Protobuf_scope.
 
+(* The first step is to define the descriptors. *)
 Definition Timestamp : PB_Descriptor :=
   [(PB_Singular (PB_Base PB_int64), "seconds", 1);
    (PB_Singular (PB_Base PB_int32), "nanos", 2)].
@@ -21,7 +22,10 @@ Definition Person : PB_Descriptor :=
 Definition AddressBook : PB_Descriptor :=
   [(PB_Repeated (PB_Embedded Person), "people", 1)].
 
-Definition AddressBook_encode := PB_Descriptor_encode_impl AddressBook.
+(* Then we can parametrize the correct encoder / decoder implementation to
+   generate correct encoder and decoder for AddressBook descriptor. *)
+
+Definition AddressBook_encode := PB_Message_encode_impl AddressBook.
 
 Definition AddressBook_decode := PB_Message_decode_impl AddressBook.
 

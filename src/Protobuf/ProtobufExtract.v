@@ -18,10 +18,12 @@ Require Import
 
 Require Export
         Fiat.Protobuf.ProtobufSpec
+        Fiat.Protobuf.ProtobufDecoder
         Fiat.Protobuf.ProtobufEncoder.
 
-Definition PB_Descriptor_encode_impl desc (msg : PB_Descriptor_denote desc) :=
-  let (bs, _) := PB_Descriptor_encode desc msg in
+(* Just a wrapper to get rid of some unused arguments from Narcissus. *)
+Definition PB_Message_encode_impl desc (msg : PB_Descriptor_denote desc) :=
+  let (bs, _) := PB_Message_encode desc msg in
   bs.
 
 Definition PB_Message_decode_impl desc bs :=
@@ -40,6 +42,7 @@ Notation "[ fld1 ; .. ; fldn ]" :=
 
 Delimit Scope Protobuf_scope with protobuf.
 
+(* Adapt from Fiat4Mirage. *)
 Extraction Inline DecodeBindOpt2.
 Extraction Inline If_Opt_Then_Else.
 Extract Constant whd => "(fun _ w -> ((Int64.logand Int64.one w) = Int64.one))".
@@ -97,8 +100,6 @@ Extract Constant Pos.compare =>
  "fun x y -> if x=y then Eq else if x<y then Lt else Gt".
 Extract Constant Pos.compare_cont =>
  "fun c x y -> if x=y then c else if x<y then Lt else Gt".
-
-
 
 Extract Inductive N => int64 [ "Int64.zero" "" ]
 "(fun f0 fp n -> if n=Int64.zero then f0 () else fp n)".

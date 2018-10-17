@@ -49,236 +49,12 @@ Require Import
 
 Import FixComp.LeastFixedPointFun.
 
-(* :TODO: is this available in the library? *)
-Lemma refineEquiv_DoneC E B
-      (monoid : Monoid B)
-      (format : E -> Comp (B * E))
-  : forall ctx,
-    refineEquiv (format DoneC ctx)
-                (format ctx).
-Proof.
-  unfold compose; simpl; intros.
-  split; unfold Bind2; intros v Comp_v.
-  - computes_to_econstructor; eauto; destruct v; simpl.
-    computes_to_econstructor; eauto; simpl.
-    rewrite mempty_right; eauto.
-  - computes_to_inv2.
-    rewrite mempty_right; eauto.
-Qed.
-
-Lemma refineEquiv_mempty_vector E
-  : forall e : E,
-    refineEquiv (ret (mempty, e))
-           (ret (build_aligned_ByteString (Vector.nil _), e)).
-Proof.
-  simpl.
-  intros; replace ByteString_id
-            with (build_aligned_ByteString (Vector.nil _)).
-  reflexivity.
-  unfold build_aligned_ByteString.
-  unfold ByteString_id.
-  f_equal.
-  apply le_uniqueness_proof.
-Qed.
-
 Ltac simpl_rewrite T :=
   let H := fresh in
   pose proof T as H;
   simpl in H; rewrite H; clear H.
 
-Lemma naive_format_list
-      {A}
-      (A_OK : A -> Prop)
-      (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
-      (A_encode : A -> CacheFormat -> (ByteString * CacheFormat))
-      (A_format_OK :
-         forall a ce,
-           A_OK a
-           -> refine (A_format a ce)
-                    (ret (A_encode a ce)))
-  : forall (As : list A)
-      (ce : CacheFormat),
-    (forall a, In a As -> A_OK a)
-    -> refine (format_list A_format As ce)
-             (ret (encode_list A_encode As ce)).
-Proof.
-  induction As; intros. easy.
-  simpl.
-  unfold Bind2. rewrite A_format_OK.
-  simplify with monad laws. rewrite IHAs.
-  simplify with monad laws. destruct A_encode, encode_list. reflexivity.
-  all : intuition.
-Qed.
-
-Definition PB_LengthDelimited_encode'
-           {A}
-           (A_OK : A -> Prop)
-           (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
-  : { impl : _ |
-      forall (A_encode : A -> CacheFormat -> (ByteString * CacheFormat))
-        (As : list A)
-        (ce : CacheFormat),
-        (forall a ce,
-             A_OK a
-             -> refine (A_format a ce)
-                      (ret (A_encode a ce))) ->
-        (forall a, In a As -> A_OK a) ->
-        refine (PB_LengthDelimited_format A_format As ce)
-               (ret (impl A_encode As ce)) }.
-Proof.
-  eexists. intros.
-  unfold PB_LengthDelimited_format.
-  unfold Bind2. rewrite SizedList_format_eq_format_list.
-  rewrite naive_format_list.
-  simplify with monad laws.
-  simpl_rewrite (proj2_sig Varint_encode').
-  simplify with monad laws.
-  higher_order_reflexivity.
-  all : eauto.
-Defined.
-
-Lemma PB_LengthDelimited_encode_correct
-      {A}
-      (A_OK : A -> Prop)
-      (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
-  : forall (A_encode : A -> CacheFormat -> (ByteString * CacheFormat))
-      (As : list A)
-      (ce : CacheFormat),
-    (forall a ce,
-        A_OK a
-        -> refine (A_format a ce)
-                 (ret (A_encode a ce))) ->
-    (forall a, In a As -> A_OK a) ->
-    refine (PB_LengthDelimited_format A_format As ce)
-           (ret ((proj1_sig (PB_LengthDelimited_encode' A_OK A_format)) A_encode As ce)).
-Proof.
-  apply (proj2_sig (PB_LengthDelimited_encode' A_OK A_format)).
-Qed.
-
-Section encode_list'.
-  Context {A : Type}.
-  Context {B : Type}.
-  Context {monoid : Monoid B}.
-
-  Fixpoint encode_list'
-           (xs0 : list A)
-           (encode_A : forall a : A, In a xs0 -> CacheFormat -> B * CacheFormat)
-           (ce : CacheFormat)
-    : B * CacheFormat.
-    refine
-      (match xs0 return (forall a : A, In a xs0 -> CacheFormat -> B * CacheFormat) -> _ with
-       | nil => fun _ => (mempty, ce)
-       | x :: xs' =>
-         fun encode_A =>
-           let (b1, env1) := encode_A x _ ce in
-           let (b2, env2) := encode_list' xs' (fun a _ ce => encode_A a _ ce) env1 in
-           (mappend b1 b2, env2)
-       end encode_A); abstract intuition.
-  Defined.
-End encode_list'.
-
-Lemma naive_format_list'
-      {A}
-      (A_OK : A -> Prop)
-      (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
-  : forall (As : list A)
-      (A_encode : forall a : A, In a As -> CacheFormat -> (ByteString * CacheFormat))
-      (ce : CacheFormat),
-    (forall a pf ce,
-        A_OK a
-        -> refine (A_format a ce)
-                 (ret (A_encode a pf ce))) ->
-    (forall a, In a As -> A_OK a) ->
-    refine (format_list A_format As ce)
-             (ret (encode_list' As A_encode ce)).
-Proof.
-  induction As; intros. easy.
-  simpl.
-  unfold Bind2. rewrite H.
-  simplify with monad laws. rewrite IHAs.
-  simplify with monad laws.
-  2 : intros; apply H; eauto.
-  2-3 : intuition.
-  destruct A_encode eqn:Heq1. rewrite Heq1.
-  destruct encode_list' eqn:Heq2. rewrite Heq2.
-  reflexivity.
-Qed.
-
-Definition PB_LengthDelimited_encode''
-           {A}
-           (A_OK : A -> Prop)
-           (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
-  : { impl : _ |
-      forall (As : list A)
-        (A_encode : forall a : A, In a As -> CacheFormat -> (ByteString * CacheFormat))
-        (ce : CacheFormat),
-        (forall a pf ce,
-            A_OK a
-            -> refine (A_format a ce)
-                     (ret (A_encode a pf ce))) ->
-        (forall a, In a As -> A_OK a) ->
-        refine (PB_LengthDelimited_format A_format As ce)
-               (ret (impl As A_encode ce))}.
-Proof.
-  eexists. intros.
-  unfold PB_LengthDelimited_format.
-  unfold Bind2. rewrite SizedList_format_eq_format_list.
-  rewrite naive_format_list'.
-  simplify with monad laws.
-  simpl_rewrite (proj2_sig Varint_encode').
-  simplify with monad laws.
-  higher_order_reflexivity.
-  all : eauto.
-Defined.
-
-Lemma PB_LengthDelimited_encode_correct'
-      {A}
-      (A_OK : A -> Prop)
-      (A_format : A -> CacheFormat -> Comp (ByteString * CacheFormat))
-  : forall (As : list A)
-      (A_encode : forall a : A, In a As -> CacheFormat -> (ByteString * CacheFormat))
-      (ce : CacheFormat),
-    (forall a pf ce,
-        A_OK a
-        -> refine (A_format a ce)
-                 (ret (A_encode a pf ce))) ->
-    (forall a, In a As -> A_OK a) ->
-    refine (PB_LengthDelimited_format A_format As ce)
-           (ret ((proj1_sig (PB_LengthDelimited_encode'' A_OK A_format)) As A_encode ce)).
-Proof.
-  apply (proj2_sig (PB_LengthDelimited_encode'' A_OK A_format)).
-Qed.
-
-Fixpoint WordLE_encode {n} : word (8*n) -> Vector.t char n.
-Proof.
-  destruct n; intros w.
-  - exact (Vector.nil _).
-  - replace (8 * S n) with (8 + (8 * n)) in w by abstract omega.
-    exact (Vector.cons _ (split1 8 _ w) _ (WordLE_encode _ (split2 8 _ w))).
-Defined.
-
-Lemma WordLE_encode_correct {n}
-  : forall (w : word (8*n)) (ce : CacheFormat),
-    refine (format_wordLE w ce)
-           (ret ((fun w ce => (build_aligned_ByteString (WordLE_encode w), ce)) w ce)).
-Proof.
-  induction n; intros.
-  simpl in *. unfold format_wordLE.
-  shatter_word w.
-  unfold format_word. simpl.
-  f_equiv. f_equal.
-  eapply ByteString_f_equal; simpl.
-  instantiate (1 := eq_refl _). reflexivity.
-  instantiate (1 := eq_refl _). reflexivity.
-  unfold WordLE_encode.
-  generalize (WordLE_encode_subproof n). destruct e.
-  set (8*n) as n'.
-  etransitivity.
-  eapply AlignedFormatChar.
-  apply IHn.
-  reflexivity.
-Qed.
-
+(* Encoder for wire type format. *)
 Definition PB_WireType_encode' (wty : PB_WireType)
   : {impl : _ |
      forall (x : PB_WireType_denote wty) (ce : CacheFormat),
@@ -335,6 +111,7 @@ Qed.
 
 Arguments proj1_sig : simpl never.
 
+(* Encoder for the IR element. *)
 Definition PB_IRElm_encode'
   : {impl : _ | refineFun (fDom:=[PB_IRElm; CacheFormat]) PB_IRElm_format (Lift_cfunType _ _ impl)}.
 Proof.
@@ -390,18 +167,19 @@ Proof.
   - simpl. intros. higher_order_reflexivity.
 Defined.
 
-Definition PB_Descriptor_IR_encode' (PB_Descriptor_IR_encode : forall desc, PB_Descriptor_denote desc -> PB_IR)
+(* Encoder from message to IR. *)
+Definition PB_Message_IR_encode' (PB_Descriptor_IR_encode : forall desc, PB_Descriptor_denote desc -> PB_IR)
   : forall {n} (desc : PB_Desc n), PB_Descriptor_denote (Build_PB_Descriptor desc) -> PB_IR.
 Proof.
   refine
-    (fix PB_Descriptor_IR_encode' {n} (desc : PB_Desc n) (msg : PB_Descriptor_denote (Build_PB_Descriptor desc)) :=
+    (fix PB_Message_IR_encode' {n} (desc : PB_Desc n) (msg : PB_Descriptor_denote (Build_PB_Descriptor desc)) :=
        match desc return PB_Descriptor_denote (Build_PB_Descriptor desc) -> _ with
        | Vector.nil => fun _ => nil
        | Vector.cons fld _ desc' =>
          match fld with
          | Build_PB_Field ty _ t =>
            fun msg =>
-             let ir := PB_Descriptor_IR_encode' desc' (ilist2_tl msg) in
+             let ir := PB_Message_IR_encode' desc' (ilist2_tl msg) in
              match ty with
              | PB_Singular (PB_Base pty) =>
                fun a =>
@@ -443,7 +221,7 @@ Fixpoint PB_Descriptor_IR_encode (desc : PB_Descriptor)
   : PB_IR :=
   match desc return _ -> _ with
   | Build_PB_Descriptor _ desc =>
-    fun msg => PB_Descriptor_IR_encode' PB_Descriptor_IR_encode desc msg
+    fun msg => PB_Message_IR_encode' PB_Descriptor_IR_encode desc msg
   end msg.
 
 Local Transparent computes_to.
@@ -716,7 +494,8 @@ Proof.
   }
 Qed.
 
-Lemma PB_Descriptor_IR_encode_correct
+(* Correctness for the encoder from message to IR. *)
+Lemma PB_Message_IR_encode_correct
   : forall desc,
     PB_Descriptor_OK desc ->
     forall (msg : PB_Descriptor_denote desc),
@@ -754,9 +533,7 @@ Proof.
     destruct ir. easy.
     injections.
     choose_br 5. repeat eexists.
-    2 : apply PB_Message_lookup_hd; eauto.
-    3 : f_equal; f_equal; eauto.
-    simpl. apply PB_Message_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
+    2 : apply PB_Message_lookup_hd; eauto. 3 : f_equal; f_equal; eauto. simpl. apply PB_Message_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
     apply IH; eauto using PB_Descriptor_OK_tl, PB_IR_measure_cons_lt. reflexivity.
     apply IH. apply PB_IR_measure_embedded_lt.
     eapply PB_Descriptor_OK_sub_tagToType; eauto using PB_Descriptor_tagToType_cons.
@@ -836,7 +613,8 @@ Proof.
   all : apply PB_Descriptor_tagToType_cons; eauto using PB_Descriptor_OK_hd.
 Qed.
 
-Definition PB_Descriptor_encode' (desc : PB_Descriptor)
+(* The end-to-end encoder and its correctness proofs. *)
+Definition PB_Message_encode' (desc : PB_Descriptor)
   : {impl : _ |
      PB_Descriptor_OK desc ->
      forall msg : PB_Descriptor_denote desc,
@@ -845,7 +623,7 @@ Definition PB_Descriptor_encode' (desc : PB_Descriptor)
 Proof.
   eexists. intros. unfold PB_Message_format.
   etransitivity.
-  unfold Bind2. rewrite PB_Descriptor_IR_encode_correct.
+  unfold Bind2. rewrite PB_Message_IR_encode_correct.
   simplify with monad laws.
   rewrite SizedList_format_eq_format_list.
   rewrite (naive_format_list (fun _ => True)).
@@ -863,5 +641,18 @@ Arguments Guarded_Vector_split : simpl never.
 Arguments Core.append_word : simpl never.
 Arguments proj1_sig /.
 Arguments Varint_split : simpl never.
-Definition PB_Descriptor_encode (desc : PB_Descriptor) :=
-  Eval simpl in (proj1_sig (PB_Descriptor_encode' desc)).
+
+Definition PB_Message_encode (desc : PB_Descriptor) :=
+  Eval simpl in (proj1_sig (PB_Message_encode' desc)).
+
+Theorem PB_Message_encode_correct (desc : PB_Descriptor)
+  : PB_Descriptor_OK desc ->
+    forall msg : PB_Descriptor_denote desc,
+    refine (PB_Message_format desc msg ())
+           (ret (PB_Message_encode desc msg )).
+Proof.
+  apply (proj2_sig (PB_Message_encode' desc)).
+Qed.
+
+(* The only axiom we use is functional_extensionality. *)
+(* Print Assumptions PB_Message_encode_correct. *)
