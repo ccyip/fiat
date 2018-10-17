@@ -80,6 +80,8 @@ Section SizedList.
     intro. reflexivity.
   Qed.
 
+  (* The format is equivalent to format_list, but the decoder takes the number
+     of bytes instead of the number of elements in the list. *)
   Lemma SizedList_format_eq_format_list
     : forall xs ce,
       refineEquiv (SizedList_format xs ce) (format_list A_format xs ce).

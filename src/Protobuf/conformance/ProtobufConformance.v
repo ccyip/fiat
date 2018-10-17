@@ -62,7 +62,7 @@ Definition TestAllTypesProto3 : PB_Descriptor :=
 
 Definition testall_encode := PB_Descriptor_encode_impl TestAllTypesProto3.
 
-Definition testall_decode := PB_Descriptor_decode_impl TestAllTypesProto3.
+Definition testall_decode := PB_Message_decode_impl TestAllTypesProto3.
 
 Extraction "testall"
            Vector.to_list Vector.of_list

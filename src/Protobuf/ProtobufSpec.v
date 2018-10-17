@@ -47,22 +47,6 @@ Require Import
 
 Import FixComp.LeastFixedPointFun.
 
-Local Arguments natToWord : simpl never.
-Local Arguments NToWord : simpl never.
-Local Arguments wordToN : simpl never.
-Local Arguments pow2 : simpl never.
-Local Arguments weqb : simpl never.
-Local Arguments split1 : simpl never.
-Local Arguments split2 : simpl never.
-Local Arguments combine : simpl never.
-Local Arguments format_wordLE : simpl never.
-Local Arguments decode_wordLE : simpl never.
-Local Arguments N.shiftl : simpl never.
-Local Arguments N.shiftr : simpl never.
-Local Arguments N.lor : simpl never.
-Local Arguments N.land : simpl never.
-Local Arguments CacheDecode : simpl never.
-
 Inductive PB_WireType : Set :=
 | PB_Varint : PB_WireType
 | PB_32bit : PB_WireType
@@ -774,22 +758,22 @@ Defined.
 Opaque PB_Descriptor_tagToDenoteType_correct.
 
 (* Look up value of the field of the given message by its tag. *)
-Definition PB_Descriptor_lookup' {n} {desc : PB_Desc n}
+Definition PB_Message_lookup' {n} {desc : PB_Desc n}
            (msg : PB_Descriptor_denote (Build_PB_Descriptor desc))
            (tag : BoundedTag (Build_PB_Descriptor desc)) :=
   type_cast_r (PB_Descriptor_tagToDenoteType_correct (Build_PB_Descriptor desc) tag)
               (GetAttributeRaw msg (PB_Descriptor_tagToIndex tag)).
 
-Definition PB_Descriptor_lookup {desc : PB_Descriptor} :=
+Definition PB_Message_lookup {desc : PB_Descriptor} :=
   match desc return PB_Descriptor_denote desc ->
                     forall tag : BoundedTag desc,
                       PB_Type_denote (PB_Descriptor_tagToType tag) with
   | Build_PB_Descriptor _ v =>
-    fun msg tag => @PB_Descriptor_lookup' _ v msg tag
+    fun msg tag => @PB_Message_lookup' _ v msg tag
   end.
 
 (* Update value of the field of the given message by its tag. *)
-Definition PB_Descriptor_update' {n} {desc : PB_Desc n}
+Definition PB_Message_update' {n} {desc : PB_Desc n}
            (msg : PB_Descriptor_denote (Build_PB_Descriptor desc))
            (tag : BoundedTag (Build_PB_Descriptor desc))
            (value : PB_Type_denote (PB_Descriptor_tagToType tag))
@@ -800,13 +784,13 @@ Definition PB_Descriptor_update' {n} {desc : PB_Desc n}
                         (Build_PB_Descriptor desc) tag)
                      value).
 
-Definition PB_Descriptor_update {desc : PB_Descriptor} :=
+Definition PB_Message_update {desc : PB_Descriptor} :=
   match desc return PB_Descriptor_denote desc ->
                     forall tag : BoundedTag desc,
                       PB_Type_denote (PB_Descriptor_tagToType tag) ->
                       PB_Descriptor_denote desc with
   | Build_PB_Descriptor _ v =>
-    fun msg tag value => PB_Descriptor_update' msg tag value
+    fun msg tag value => PB_Message_update' msg tag value
   end.
 
 Inductive PB_IRElm : Type :=
@@ -909,9 +893,6 @@ Definition PB_IRElm_toWireType (elm : PB_IRElm) :=
   | inl (inl _) => PB_IRType elm
   | _ => PB_LengthDelimited
   end.
-
-Local Opaque PB_LengthDelimited_decode.
-Local Opaque Varint_decode.
 
 (* Format the value of an element. *)
 Definition PB_IRVal_format
@@ -1124,7 +1105,7 @@ Inductive PB_IR_transit
                      ((Build_PB_IRElm (bindex t)
                                       (PB_BaseType_toWireType pty)
                                       (inl (inl v))) :: ir)
-                     (PB_Descriptor_update msg t (eq_rect_r _ v pf))
+                     (PB_Message_update msg t (eq_rect_r _ v pf))
 | PB_IR_repeated_cons desc :
     forall (msg' : PB_Descriptor_denote desc) ir (msg : PB_Descriptor_denote desc),
       PB_IR_transit msg' ir msg ->
@@ -1135,10 +1116,10 @@ Inductive PB_IR_transit
                      ((Build_PB_IRElm (bindex t)
                                       (PB_BaseType_toWireType pty)
                                       (inl (inl v))) :: ir)
-                     (PB_Descriptor_update msg t
+                     (PB_Message_update msg t
                                         (eq_rect_r
                                            _
-                                           ((eq_rect _ _ (PB_Descriptor_lookup msg t) _ pf) ++ [v])
+                                           ((eq_rect _ _ (PB_Message_lookup msg t) _ pf) ++ [v])
                                            pf))
 | PB_IR_repeated_app desc :
     forall (msg' : PB_Descriptor_denote desc) ir (msg : PB_Descriptor_denote desc),
@@ -1151,10 +1132,10 @@ Inductive PB_IR_transit
                      ((Build_PB_IRElm (bindex t)
                                       (PB_BaseType_toWireType pty)
                                       (inl (inr v))) :: ir)
-                     (PB_Descriptor_update msg t
+                     (PB_Message_update msg t
                                         (eq_rect_r
                                            _
-                                           ((eq_rect _ _ (PB_Descriptor_lookup msg t) _ pf) ++ v)
+                                           ((eq_rect _ _ (PB_Message_lookup msg t) _ pf) ++ v)
                                            pf))
 | PB_IR_unknown desc :
     forall (msg' : PB_Descriptor_denote desc) ir (msg : PB_Descriptor_denote desc),
@@ -1173,13 +1154,13 @@ Inductive PB_IR_transit
       forall (t : BoundedTag desc) (desc' : PB_Descriptor)
         (pf : PB_Descriptor_tagToType t = PB_Singular (PB_Embedded desc'))
         v (msg'' : PB_Descriptor_denote desc'),
-        eq_rect _ _ (PB_Descriptor_lookup msg t) _ pf = None ->
+        eq_rect _ _ (PB_Message_lookup msg t) _ pf = None ->
         PB_IR_transit (PB_Descriptor_default desc') v msg'' ->
         PB_IR_transit msg'
                      ((Build_PB_IRElm (bindex t)
                                       PB_LengthDelimited
                                       (inr v)) :: ir)
-                     (PB_Descriptor_update msg t
+                     (PB_Message_update msg t
                                         (eq_rect_r _ (Some msg'') pf))
 | PB_IR_embedded_some desc :
     forall (msg' : PB_Descriptor_denote desc) ir (msg : PB_Descriptor_denote desc),
@@ -1187,13 +1168,13 @@ Inductive PB_IR_transit
       forall (t : BoundedTag desc) (desc' : PB_Descriptor)
         (pf : PB_Descriptor_tagToType t = PB_Singular (PB_Embedded desc'))
         v (msg'' msg''' : PB_Descriptor_denote desc'),
-        eq_rect _ _ (PB_Descriptor_lookup msg t) _ pf = Some msg'' ->
+        eq_rect _ _ (PB_Message_lookup msg t) _ pf = Some msg'' ->
         PB_IR_transit msg'' v msg''' ->
         PB_IR_transit msg'
                      ((Build_PB_IRElm (bindex t)
                                       PB_LengthDelimited
                                       (inr v)) :: ir)
-                     (PB_Descriptor_update msg t
+                     (PB_Message_update msg t
                                         (eq_rect_r _ (Some msg''') pf))
 | PB_IR_repeated_embedded desc :
     forall (msg' : PB_Descriptor_denote desc) ir (msg : PB_Descriptor_denote desc),
@@ -1206,10 +1187,10 @@ Inductive PB_IR_transit
                      ((Build_PB_IRElm (bindex t)
                                       PB_LengthDelimited
                                       (inr v)) :: ir)
-                     (PB_Descriptor_update msg t
+                     (PB_Message_update msg t
                                         (eq_rect_r
                                            _
-                                           ((eq_rect _ _ (PB_Descriptor_lookup msg t) _ pf) ++ [msg''])
+                                           ((eq_rect _ _ (PB_Message_lookup msg t) _ pf) ++ [msg''])
                                            pf))
 .
 
@@ -1283,21 +1264,21 @@ Qed.
 
 (* We define the format directly from this relation. This is the stronger
    version. *)
-Definition PB_Descriptor_IR_format_ref' (desc : PB_Descriptor) msg'
+Definition PB_Message_IR_format_ref' (desc : PB_Descriptor) msg'
   : FormatM (PB_Descriptor_denote desc) PB_IR :=
   fun msg _ => {b | PB_IR_transit msg' (fst b) msg}.
-Arguments PB_Descriptor_IR_format_ref' /.
+Arguments PB_Message_IR_format_ref' /.
 
 (* This is the format we want, which is just a special case of the stronger
    version. *)
-Definition PB_Descriptor_IR_format_ref (desc : PB_Descriptor)
+Definition PB_Message_IR_format_ref (desc : PB_Descriptor)
   : FormatM (PB_Descriptor_denote desc) PB_IR :=
-  PB_Descriptor_IR_format_ref' desc (PB_Descriptor_default desc).
+  PB_Message_IR_format_ref' desc (PB_Descriptor_default desc).
 
 (* Here is an alternative definition of the previous relation. They are
    equivalent as we show below. This is a byproduct of our another experiment
    but we end up proving the correctness theorem using this definition. *)
-Definition PB_Descriptor_IR_format_body
+Definition PB_Message_IR_format_body
            (format : funType_dep [PB_Descriptor_denote; PB_Descriptor_denote; fun _ => CacheFormat]
                                  (PB_IR * CacheFormat))
   : funType_dep [PB_Descriptor_denote; PB_Descriptor_denote; fun _ => CacheFormat]
@@ -1314,7 +1295,7 @@ Definition PB_Descriptor_IR_format_body
         ir = (Build_PB_IRElm (bindex t)
                              (PB_BaseType_toWireType pty)
                              (inl (inl v))) :: ir1 /\
-        msg = PB_Descriptor_update msg1 t
+        msg = PB_Message_update msg1 t
                                 (eq_rect_r _ v pf)) \/
     (* repeated_cons *)
     (exists ir1 msg1 t pty
@@ -1324,10 +1305,10 @@ Definition PB_Descriptor_IR_format_body
         ir = (Build_PB_IRElm (bindex t)
                              (PB_BaseType_toWireType pty)
                              (inl (inl v))) :: ir1 /\
-        msg = PB_Descriptor_update msg1 t
+        msg = PB_Message_update msg1 t
                                 (eq_rect_r
                                    _
-                                   ((eq_rect _ _ (PB_Descriptor_lookup msg1 t) _ pf) ++ [v])
+                                   ((eq_rect _ _ (PB_Message_lookup msg1 t) _ pf) ++ [v])
                                    pf)) \/
     (* repeated_app *)
     (exists ir1 msg1 t pty
@@ -1338,10 +1319,10 @@ Definition PB_Descriptor_IR_format_body
         ir = (Build_PB_IRElm (bindex t)
                              (PB_BaseType_toWireType pty)
                              (inl (inr v))) :: ir1 /\
-        msg = PB_Descriptor_update msg1 t
+        msg = PB_Message_update msg1 t
                                 (eq_rect_r
                                    _
-                                   ((eq_rect _ _ (PB_Descriptor_lookup msg1 t) _ pf) ++ v)
+                                   ((eq_rect _ _ (PB_Message_lookup msg1 t) _ pf) ++ v)
                                    pf)) \/
     (* unknown *)
     (exists ir1 (t : UnboundedTag desc) wty (v : PB_WireType_denote wty) ce1 ce2,
@@ -1354,23 +1335,23 @@ Definition PB_Descriptor_IR_format_body
     (exists ir1 msg1 t desc' v (msg2 : PB_Descriptor_denote desc')
        (pf : PB_Descriptor_tagToType t = PB_Singular (PB_Embedded desc')) ce1 ce2 ce3 ce4,
         format _ msg' msg1 ce1 (ir1, ce2) /\
-        eq_rect _ _ (PB_Descriptor_lookup msg1 t) _ pf = None /\
+        eq_rect _ _ (PB_Message_lookup msg1 t) _ pf = None /\
         format _ (PB_Descriptor_default desc') msg2 ce3 (v, ce4) /\
         ir = (Build_PB_IRElm (bindex t)
                              PB_LengthDelimited
                              (inr v)) :: ir1 /\
-        msg = PB_Descriptor_update msg1 t
+        msg = PB_Message_update msg1 t
                                 (eq_rect_r _ (Some msg2) pf)) \/
     (* embedded_some *)
     (exists ir1 msg1 t desc' v (msg2 msg3 : PB_Descriptor_denote desc')
        (pf : PB_Descriptor_tagToType t = PB_Singular (PB_Embedded desc')) ce1 ce2 ce3 ce4,
         format _ msg' msg1 ce1 (ir1, ce2) /\
-        eq_rect _ _ (PB_Descriptor_lookup msg1 t) _ pf = Some msg2 /\
+        eq_rect _ _ (PB_Message_lookup msg1 t) _ pf = Some msg2 /\
         format _ msg2 msg3 ce3 (v, ce4) /\
         ir = (Build_PB_IRElm (bindex t)
                              PB_LengthDelimited
                              (inr v)) :: ir1 /\
-        msg = PB_Descriptor_update msg1 t
+        msg = PB_Message_update msg1 t
                                 (eq_rect_r _ (Some msg3) pf)) \/
     (* repeated_embedded *)
     (exists ir1 msg1 t desc' v (msg2 : PB_Descriptor_denote desc')
@@ -1380,21 +1361,20 @@ Definition PB_Descriptor_IR_format_body
         ir = (Build_PB_IRElm (bindex t)
                              PB_LengthDelimited
                              (inr v)) :: ir1 /\
-        msg = PB_Descriptor_update msg1 t
+        msg = PB_Message_update msg1 t
                                 (eq_rect_r
                                    _
-                                   ((eq_rect _ _ (PB_Descriptor_lookup msg1 t) _ pf) ++ [msg2])
+                                   ((eq_rect _ _ (PB_Message_lookup msg1 t) _ pf) ++ [msg2])
                                    pf))
 .
 
 Local Transparent computes_to.
 Local Transparent Pick.
-
-Lemma PB_Descriptor_IR_format_body_monotone
-  : monotonic_function PB_Descriptor_IR_format_body.
+Lemma PB_Message_IR_format_body_monotone
+  : monotonic_function PB_Message_IR_format_body.
 Proof.
   unfold monotonic_function. simpl. intros.
-  unfold PB_Descriptor_IR_format_body.
+  unfold PB_Message_IR_format_body.
   intros [ir desc msg' msg ce]. intros [? ?]. unfold computes_to. intros.
   destruct_many;
     let solv n := solve [choose_br n; repeat eexists; eauto; apply H; eauto] in
@@ -1406,28 +1386,28 @@ Proof.
 Qed.
 
 (* We define the format as a least fixed point. *)
-Definition PB_Descriptor_IR_format' := LeastFixedPoint_dep PB_Descriptor_IR_format_body.
+Definition PB_Message_IR_format' := LeastFixedPoint_dep PB_Message_IR_format_body.
 
-Definition PB_Descriptor_IR_format (desc : PB_Descriptor)
+Definition PB_Message_IR_format (desc : PB_Descriptor)
   : FormatM (PB_Descriptor_denote desc) PB_IR :=
   fun msg =>
-    PB_Descriptor_IR_format' _ (PB_Descriptor_default desc) msg.
+    PB_Message_IR_format' _ (PB_Descriptor_default desc) msg.
 
 (* These two definitions of format are indeed equivalent. *)
-Theorem PB_Descriptor_IR_format_eq' (desc : PB_Descriptor)
+Theorem PB_Message_IR_format_eq' (desc : PB_Descriptor)
   : forall msg' msg ce,
-    refineEquiv (PB_Descriptor_IR_format_ref' desc msg' msg ce)
-                (PB_Descriptor_IR_format' desc msg' msg ce).
+    refineEquiv (PB_Message_IR_format_ref' desc msg' msg ce)
+                (PB_Message_IR_format' desc msg' msg ce).
 Proof.
   unfold refineEquiv, refine.
-  unfold PB_Descriptor_IR_format_ref', PB_Descriptor_IR_format'. unfold Pick.
+  unfold PB_Message_IR_format_ref', PB_Message_IR_format'. unfold Pick.
   unfold computes_to. simpl.
   intros. split; intros [ir ce'] H; simpl in *. {
     generalize dependent desc.
     generalize dependent ce.
     generalize dependent ce'.
     induction ir as [ir IH] using (well_founded_ind well_founded_lt_b); intros;
-      apply (unroll_LeastFixedPoint_dep PB_Descriptor_IR_format_body_monotone) in H.
+      apply (unroll_LeastFixedPoint_dep PB_Message_IR_format_body_monotone) in H.
     unfold computes_to in H. simpl in H.
     destruct_many;
       try (subst; constructor; eauto; eapply IH; eauto; apply PB_IR_measure_cons_lt || apply PB_IR_measure_embedded_lt).
@@ -1435,7 +1415,7 @@ Proof.
     eapply IH; eauto; apply PB_IR_measure_cons_lt || apply PB_IR_measure_embedded_lt.
     eapply IH; eauto; apply PB_IR_measure_cons_lt || apply PB_IR_measure_embedded_lt.
   } {
-    induction H; intros; apply (unroll_LeastFixedPoint_dep' PB_Descriptor_IR_format_body_monotone);
+    induction H; intros; apply (unroll_LeastFixedPoint_dep' PB_Message_IR_format_body_monotone);
       let rec trial n := match n with
                          | O => try solve [choose_br 0; auto]
                          | S ?n' => try solve [choose_br n; repeat eexists; eauto]; trial n'
@@ -1444,24 +1424,24 @@ Proof.
   }
 Qed.
 
-Theorem PB_Descriptor_IR_format_eq (desc : PB_Descriptor)
+Theorem PB_Message_IR_format_eq (desc : PB_Descriptor)
   : forall msg ce,
-    refineEquiv (PB_Descriptor_IR_format_ref desc msg ce)
-                (PB_Descriptor_IR_format desc msg ce).
+    refineEquiv (PB_Message_IR_format_ref desc msg ce)
+                (PB_Message_IR_format desc msg ce).
 Proof.
-  apply PB_Descriptor_IR_format_eq'.
+  apply PB_Message_IR_format_eq'.
 Qed.
 
 (* The format only produces well-formed IR. *)
-Lemma PB_Descriptor_IR_Elm_OK (desc : PB_Descriptor)
+Lemma PB_Message_IR_format_Elm_OK (desc : PB_Descriptor)
       (HP : PB_Descriptor_OK desc)
       (msg : PB_Descriptor_denote desc) (ir : PB_IR)
       (ce ce' : CacheFormat)
-  : PB_Descriptor_IR_format desc msg ce ↝ (ir, ce') ->
+  : PB_Message_IR_format desc msg ce ↝ (ir, ce') ->
     forall elm : PB_IRElm, In elm ir -> PB_IRElm_OK desc elm.
 Proof.
-  intro H. apply (proj1 (PB_Descriptor_IR_format_eq _ _ _)) in H. revert H.
-  unfold PB_Descriptor_IR_format_ref. simpl. unfold computes_to, Pick. simpl.
+  intro H. apply (proj1 (PB_Message_IR_format_eq _ _ _)) in H. revert H.
+  unfold PB_Message_IR_format_ref. simpl. unfold computes_to, Pick. simpl.
   induction 1; intros; try easy;
     match goal with
     | H : In _ _ |- _ => destruct H
@@ -1484,7 +1464,7 @@ Proof.
 Qed.
 
 (* The end-to-end format is just a composition of the formats of layers. *)
-Definition PB_Descriptor_format (desc : PB_Descriptor)
+Definition PB_Message_format (desc : PB_Descriptor)
   : FormatM (PB_Descriptor_denote desc) ByteString :=
   (fun msg ce =>
-     `(ir, _) <- PB_Descriptor_IR_format desc msg ce; SizedList_format PB_IRElm_format (rev ir) ce)%comp.
+     `(ir, _) <- PB_Message_IR_format desc msg ce; SizedList_format PB_IRElm_format (rev ir) ce)%comp.

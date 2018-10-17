@@ -490,4 +490,4 @@ Proof.
   apply (proj2_sig Varint_encode').
 Qed.
 
-Eval simpl in (proj1_sig Varint_encode').
+Definition Varint_encode := Eval simpl in (proj1_sig Varint_encode').

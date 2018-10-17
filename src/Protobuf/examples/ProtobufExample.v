@@ -23,7 +23,7 @@ Definition AddressBook : PB_Descriptor :=
 
 Definition AddressBook_encode := PB_Descriptor_encode_impl AddressBook.
 
-Definition AddressBook_decode := PB_Descriptor_decode_impl AddressBook.
+Definition AddressBook_decode := PB_Message_decode_impl AddressBook.
 
 (* Boilerplate for easier access to the message in the extracted code. *)
 Require Import

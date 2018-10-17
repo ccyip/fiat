@@ -527,14 +527,14 @@ Proof.
     eauto using Vector.In_cons_hd; eauto.
 Qed.
 
-Lemma PB_Descriptor_update_hd
+Lemma PB_Message_update_hd
   : forall ty name t n (desc' : PB_Desc n)
       (HOK : PB_Descriptor_OK (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc')))
       (tag : BoundedTag (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc'))),
     t = bindex tag ->
     forall (msg : PB_Descriptor_denote (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc'))) v v' pf,
       ilist2_hd msg = v' ->
-      msg = PB_Descriptor_update
+      msg = PB_Message_update
               (desc:=Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc'))
               (icons2 v (ilist2_tl msg)) tag (eq_rect_r PB_Type_denote v' pf).
 Proof.
@@ -542,20 +542,20 @@ Proof.
   apply PB_Descriptor_boundedTag_hd_index in H; eauto.
 
   destruct msg. destruct tag. destruct indexb. simpl in *. subst.
-  unfold PB_Descriptor_update'. unfold SetAttributeRaw. simpl in *.
+  unfold PB_Message_update'. unfold SetAttributeRaw. simpl in *.
   unfold icons2. f_equal. unfold eq_rect_r.
   rewrite <- eq_rect_eq_dec by apply PB_Type_eq_dec. reflexivity.
 Qed.
 
-Lemma PB_Descriptor_update_tl
+Lemma PB_Message_update_tl
   : forall ty name t n (desc' : PB_Desc n)
       (HOK : PB_Descriptor_OK (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc')))
       (tag : BoundedTag (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc')))
       (tag' : BoundedTag (Build_PB_Descriptor desc')),
     bindex tag = bindex tag' ->
     forall (msg : PB_Descriptor_denote (Build_PB_Descriptor desc')) ty' v (v' : PB_Type_denote ty') pf pf',
-      icons2 v (PB_Descriptor_update msg tag' (eq_rect_r PB_Type_denote v' pf))
-      = PB_Descriptor_update
+      icons2 v (PB_Message_update msg tag' (eq_rect_r PB_Type_denote v' pf))
+      = PB_Message_update
           (desc:=Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc'))
           (icons2 v msg) tag (eq_rect_r PB_Type_denote v' pf').
 Proof.
@@ -564,19 +564,19 @@ Proof.
   destruct tag. destruct indexb.
   destruct tag'. destruct indexb.
   simpl in *. subst.
-  unfold PB_Descriptor_update'. unfold SetAttributeRaw.
+  unfold PB_Message_update'. unfold SetAttributeRaw.
   unfold type_cast, eq_rect_r.
   rewrite <- !eq_rect_eq_dec by apply PB_Type_eq_dec. reflexivity.
 Qed.
 
-Lemma PB_Descriptor_lookup_hd
+Lemma PB_Message_lookup_hd
   : forall ty name t n (desc' : PB_Desc n)
       (HOK : PB_Descriptor_OK (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc')))
       (tag : BoundedTag (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc'))),
       t = bindex tag ->
     forall (msg : PB_Descriptor_denote (Build_PB_Descriptor desc')) v pf,
       eq_rect _ PB_Type_denote
-              (PB_Descriptor_lookup
+              (PB_Message_lookup
                  (desc:=Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc'))
                  (icons2 v msg) tag)
               _ pf = v.
@@ -584,11 +584,11 @@ Proof.
   intros.
   apply PB_Descriptor_boundedTag_hd_index in H; eauto.
   destruct tag. destruct indexb. simpl in *. subst.
-  unfold PB_Descriptor_lookup'. unfold GetAttributeRaw. simpl in *.
+  unfold PB_Message_lookup'. unfold GetAttributeRaw. simpl in *.
   rewrite <- eq_rect_eq_dec by apply PB_Type_eq_dec. reflexivity.
 Qed.
 
-Lemma PB_Descriptor_lookup_tl
+Lemma PB_Message_lookup_tl
   : forall ty name t n (desc' : PB_Desc n)
       (HOK : PB_Descriptor_OK (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc')))
       (tag : BoundedTag (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc')))
@@ -596,10 +596,10 @@ Lemma PB_Descriptor_lookup_tl
     bindex tag = bindex tag' ->
     forall (msg : PB_Descriptor_denote (Build_PB_Descriptor desc')) ty' v pf pf',
       eq_rect _ PB_Type_denote
-              (PB_Descriptor_lookup msg tag')
+              (PB_Message_lookup msg tag')
               ty' pf
       = eq_rect _ PB_Type_denote
-                (PB_Descriptor_lookup
+                (PB_Message_lookup
                    (desc:=Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc'))
                    (icons2 v msg) tag)
                 ty' pf'.
@@ -609,7 +609,7 @@ Proof.
   destruct tag. destruct indexb.
   destruct tag'. destruct indexb.
   simpl in *. subst.
-  unfold PB_Descriptor_lookup'. unfold GetAttributeRaw.
+  unfold PB_Message_lookup'. unfold GetAttributeRaw.
   rewrite <- !eq_rect_eq_dec by apply PB_Type_eq_dec. reflexivity.
 Qed.
 
@@ -645,18 +645,18 @@ Proof.
   eapply vec_nodup_cons; eauto. apply H1.
 Qed.
 
-Lemma PB_Descriptor_IR_format_pres
+Lemma PB_Message_IR_format_pres
   : forall {n} (desc : PB_Desc n) msg1 msg2 ir ce1 ce2,
-    PB_Descriptor_IR_format' (Build_PB_Descriptor desc) msg1 msg2 ce1 ↝ (ir, ce2) ->
+    PB_Message_IR_format' (Build_PB_Descriptor desc) msg1 msg2 ce1 ↝ (ir, ce2) ->
     forall ty name t v,
       PB_Descriptor_OK (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc)) ->
       (forall t' ty' v', In (Build_PB_IRElm t' ty' v') ir -> Vector.In t' (PB_Descriptor_tags' desc)) ->
-      PB_Descriptor_IR_format' (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc))
+      PB_Message_IR_format' (Build_PB_Descriptor (Vector.cons _ (Build_PB_Field ty name t) _ desc))
                            (icons2 v msg1) (icons2 v msg2) ce1 ↝ (ir, ce2).
 Proof.
-  intros. rename H0 into HOK. apply PB_Descriptor_IR_format_eq'.
-  apply (proj1 (PB_Descriptor_IR_format_eq' _ _ _ _)) in H.
-  simpl PB_Descriptor_IR_format_ref' in *. unfold computes_to, Pick in *. simpl fst in *.
+  intros. rename H0 into HOK. apply PB_Message_IR_format_eq'.
+  apply (proj1 (PB_Message_IR_format_eq' _ _ _ _)) in H.
+  simpl PB_Message_IR_format_ref' in *. unfold computes_to, Pick in *. simpl fst in *.
 
   generalize dependent msg1.
   generalize dependent msg2.
@@ -666,19 +666,19 @@ Proof.
       edestruct PB_Descriptor_boundedTag_tl with (tag' := H)
     end;
     repeat match goal with
-           | |- context [icons2 ?v (PB_Descriptor_update _ ?t _)] =>
-             erewrite PB_Descriptor_update_tl with (v := v) (tag' := t); eauto
-           | |- context [PB_Descriptor_lookup ?x ?t] =>
+           | |- context [icons2 ?v (PB_Message_update _ ?t _)] =>
+             erewrite PB_Message_update_tl with (v := v) (tag' := t); eauto
+           | |- context [PB_Message_lookup ?x ?t] =>
              match x with
              | icons2 _ _ => fail 1
-             | _ => erewrite PB_Descriptor_lookup_tl with (tag' := t); eauto
+             | _ => erewrite PB_Message_lookup_tl with (tag' := t); eauto
              end
            | H : bindex ?a = bindex ?b |- _ => simpl in H; rewrite <- H
-           end; try solve [constructor; eauto with datatypes; erewrite <- PB_Descriptor_lookup_tl; eauto].
+           end; try solve [constructor; eauto with datatypes; erewrite <- PB_Message_lookup_tl; eauto].
   - destruct t0. simpl in *.
     exfalso. eauto.
   - eapply PB_IR_embedded_some; eauto with datatypes.
-    erewrite <- PB_Descriptor_lookup_tl; eauto.
+    erewrite <- PB_Message_lookup_tl; eauto.
     Grab Existential Variables.
     all : rewrite <- pf; apply PB_Descriptor_boundedTag_tl_index in H0; eauto;
       unfold PB_Descriptor_tagToType; simpl in *; rewrite H0; reflexivity.
@@ -720,7 +720,7 @@ Lemma PB_Descriptor_IR_encode_correct
   : forall desc,
     PB_Descriptor_OK desc ->
     forall (msg : PB_Descriptor_denote desc),
-    refine (PB_Descriptor_IR_format desc msg ())
+    refine (PB_Message_IR_format desc msg ())
            (ret (PB_Descriptor_IR_encode desc msg, ())).
 Proof.
   intros ? HOK ?. intros [ir ce] H.
@@ -732,40 +732,40 @@ Proof.
   intros.
   destruct desc as [n desc].
   induction desc; intros;
-    unfold PB_Descriptor_IR_format, PB_Descriptor_IR_format'.
-  apply (unroll_LeastFixedPoint_dep' PB_Descriptor_IR_format_body_monotone).
+    unfold PB_Message_IR_format, PB_Message_IR_format'.
+  apply (unroll_LeastFixedPoint_dep' PB_Message_IR_format_body_monotone).
   choose_br 0. destruct msg. eauto.
   destruct h as [ty ? t].
   destruct ty as [sty | sty]; destruct sty as [pty | desc'];
     simpl in Heqir. {
-    apply (unroll_LeastFixedPoint_dep' PB_Descriptor_IR_format_body_monotone).
+    apply (unroll_LeastFixedPoint_dep' PB_Message_IR_format_body_monotone).
     destruct ir. easy.
     edestruct PB_Descriptor_boundedTag_hd.
     injections.
     choose_br 1. repeat eexists.
     2 : f_equal; f_equal; eauto.
-    2 : apply PB_Descriptor_update_hd; auto.
-    simpl. apply PB_Descriptor_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
+    2 : apply PB_Message_update_hd; auto.
+    simpl. apply PB_Message_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
     apply IH; eauto using PB_Descriptor_OK_tl, PB_IR_measure_cons_lt.
   } {
     edestruct PB_Descriptor_boundedTag_hd.
     destruct ilist.prim_fst eqn:?.
-    apply (unroll_LeastFixedPoint_dep' PB_Descriptor_IR_format_body_monotone).
+    apply (unroll_LeastFixedPoint_dep' PB_Message_IR_format_body_monotone).
     destruct ir. easy.
     injections.
     choose_br 5. repeat eexists.
-    2 : apply PB_Descriptor_lookup_hd; eauto.
+    2 : apply PB_Message_lookup_hd; eauto.
     3 : f_equal; f_equal; eauto.
-    simpl. apply PB_Descriptor_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
+    simpl. apply PB_Message_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
     apply IH; eauto using PB_Descriptor_OK_tl, PB_IR_measure_cons_lt. reflexivity.
     apply IH. apply PB_IR_measure_embedded_lt.
     eapply PB_Descriptor_OK_sub_tagToType; eauto using PB_Descriptor_tagToType_cons.
     reflexivity.
-    apply PB_Descriptor_update_hd; eauto.
+    apply PB_Message_update_hd; eauto.
     simpl.
     replace msg with (icons2 (ilist2_hd msg) (ilist2_tl msg)).
     rewrite <- Heqp. subst.
-    apply PB_Descriptor_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
+    apply PB_Message_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
     apply IHdesc; eauto using PB_Descriptor_OK_tl.
     destruct msg. reflexivity.
   } {
@@ -774,53 +774,53 @@ Proof.
     subst.
     simpl. destruct msg as [v ?]. simpl in *. intros. {
       induction v using rev_ind; intros.
-      simpl. apply PB_Descriptor_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
+      simpl. apply PB_Message_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
       apply IHdesc; eauto using PB_Descriptor_OK_tl.
       rewrite <- !map_rev in *. rewrite rev_app_distr in *. simpl in *.
       unfold lt_B in *.
 
-      apply (unroll_LeastFixedPoint_dep' PB_Descriptor_IR_format_body_monotone).
+      apply (unroll_LeastFixedPoint_dep' PB_Message_IR_format_body_monotone).
       edestruct PB_Descriptor_boundedTag_hd.
       choose_br 2. repeat eexists.
       apply IHv; eauto. intros. apply IH; eauto. simpl in *. omega.
 
       repeat f_equal. apply H.
 
-      apply PB_Descriptor_update_hd; eauto using PB_Descriptor_OK_hd.
+      apply PB_Message_update_hd; eauto using PB_Descriptor_OK_hd.
       simpl. f_equal.
-      simpl_rewrite PB_Descriptor_lookup_hd; eauto using PB_Descriptor_OK_hd.
+      simpl_rewrite PB_Message_lookup_hd; eauto using PB_Descriptor_OK_hd.
     }
 
-    apply (unroll_LeastFixedPoint_dep' PB_Descriptor_IR_format_body_monotone).
+    apply (unroll_LeastFixedPoint_dep' PB_Message_IR_format_body_monotone).
     destruct ir. easy.
     edestruct PB_Descriptor_boundedTag_hd.
     injections.
     choose_br 3. repeat eexists.
     2 : eauto.
     2 : f_equal; f_equal; eauto.
-    2 : apply PB_Descriptor_update_hd; auto.
-    simpl. apply PB_Descriptor_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
+    2 : apply PB_Message_update_hd; auto.
+    simpl. apply PB_Message_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
     apply IH; eauto using PB_Descriptor_OK_tl, PB_IR_measure_cons_lt.
-    simpl. simpl_rewrite PB_Descriptor_lookup_hd; eauto using PB_Descriptor_OK_hd.
+    simpl. simpl_rewrite PB_Message_lookup_hd; eauto using PB_Descriptor_OK_hd.
   } {
     replace msg with (icons2 (ilist2_hd msg) (ilist2_tl msg)) by (destruct msg; auto).
     subst.
     simpl. destruct msg as [v ?]. simpl in *. intros. {
       induction v using rev_ind; intros.
-      simpl. apply PB_Descriptor_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
+      simpl. apply PB_Message_IR_format_pres; eauto using PB_Descriptor_IR_encode_in_tags.
       apply IHdesc; eauto using PB_Descriptor_OK_tl.
       rewrite <- !map_rev in *. rewrite rev_app_distr in *. simpl in *.
       unfold lt_B in *.
 
-      apply (unroll_LeastFixedPoint_dep' PB_Descriptor_IR_format_body_monotone).
+      apply (unroll_LeastFixedPoint_dep' PB_Message_IR_format_body_monotone).
       edestruct PB_Descriptor_boundedTag_hd.
       choose_br 7. repeat eexists.
       apply IHv; eauto. intros. apply IH; eauto. simpl in *. omega.
       intros. apply IH; eauto. simpl in *. omega.
       3 : {
-        apply PB_Descriptor_update_hd; eauto using PB_Descriptor_OK_hd.
+        apply PB_Message_update_hd; eauto using PB_Descriptor_OK_hd.
         simpl. f_equal.
-        simpl_rewrite PB_Descriptor_lookup_hd; eauto using PB_Descriptor_OK_hd.
+        simpl_rewrite PB_Message_lookup_hd; eauto using PB_Descriptor_OK_hd.
       }
       2 : {
         repeat f_equal. apply H.
@@ -840,10 +840,10 @@ Definition PB_Descriptor_encode' (desc : PB_Descriptor)
   : {impl : _ |
      PB_Descriptor_OK desc ->
      forall msg : PB_Descriptor_denote desc,
-        refine (PB_Descriptor_format desc msg ())
+        refine (PB_Message_format desc msg ())
                (ret (impl msg ))}.
 Proof.
-  eexists. intros. unfold PB_Descriptor_format.
+  eexists. intros. unfold PB_Message_format.
   etransitivity.
   unfold Bind2. rewrite PB_Descriptor_IR_encode_correct.
   simplify with monad laws.

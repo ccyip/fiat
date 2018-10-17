@@ -24,8 +24,8 @@ Definition PB_Descriptor_encode_impl desc (msg : PB_Descriptor_denote desc) :=
   let (bs, _) := PB_Descriptor_encode desc msg in
   bs.
 
-Definition PB_Descriptor_decode_impl desc bs :=
-  match PB_Descriptor_decode desc bs tt with
+Definition PB_Message_decode_impl desc bs :=
+  match PB_Message_decode desc bs tt with
   | Some (msg, _, _) => Some msg
   | None => None
   end.
