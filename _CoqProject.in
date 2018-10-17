@@ -665,6 +665,7 @@ src/Common/Tactics/transparent_abstract_tactics.ml
 src/Protobuf/ProtobufLengthDelimited.v
 src/Protobuf/ProtobufSpec.v
 src/Protobuf/ProtobufEncoder.v
+src/Protobuf/ProtobufDecoder.v
 src/Protobuf/ProtobufExtract.v
 src/Protobuf/examples/ProtobufExample.v
 src/Protobuf/conformance/ProtobufConformance.v

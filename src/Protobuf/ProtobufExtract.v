@@ -20,12 +20,12 @@ Require Export
         Fiat.Protobuf.ProtobufSpec
         Fiat.Protobuf.ProtobufEncoder.
 
-Definition PB_Message_encode_impl desc (msg : PB_Message_denote desc) :=
-  let (bs, _) := PB_Message_encode desc msg in
+Definition PB_Descriptor_encode_impl desc (msg : PB_Descriptor_denote desc) :=
+  let (bs, _) := PB_Descriptor_encode desc msg in
   bs.
 
-Definition PB_Message_decode_impl desc bs :=
-  match PB_Message_decode desc bs tt with
+Definition PB_Descriptor_decode_impl desc bs :=
+  match PB_Descriptor_decode desc bs tt with
   | Some (msg, _, _) => Some msg
   | None => None
   end.
@@ -35,7 +35,7 @@ Notation "( ty , name , tag )" :=
   : Protobuf_scope.
 
 Notation "[ fld1 ; .. ; fldn ]" :=
-  (Build_PB_Message (@Vector.cons _ fld1 _ .. (Vector.cons _ fldn _ (Vector.nil _)) ..))
+  (Build_PB_Descriptor (@Vector.cons _ fld1 _ .. (Vector.cons _ fldn _ (Vector.nil _)) ..))
   : Protobuf_scope.
 
 Delimit Scope Protobuf_scope with protobuf.
