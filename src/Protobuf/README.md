@@ -3,6 +3,9 @@ The Verified Protocol Buffer Compiler
 
 ## Dependencies
 
+Our specification and implementation are test in Coq 8.8.1 (compiled with OCaml
+4.06.0).
+
 In order to run the official example implementation and conformance test, we
 need to build the offical Protocol Buffer first. The version used in our
 experiment is 3.6.1.
