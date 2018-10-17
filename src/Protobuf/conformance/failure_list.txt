@@ -1,3 +1,4 @@
+# We do not support oneof type yet.
 Recommended.Proto3.ProtobufInput.OneofZeroBool.ProtobufOutput
 Recommended.Proto3.ProtobufInput.OneofZeroBytes.ProtobufOutput
 Recommended.Proto3.ProtobufInput.OneofZeroDouble.ProtobufOutput
@@ -8,8 +9,17 @@ Recommended.Proto3.ProtobufInput.OneofZeroMessageSetTwice.ProtobufOutput
 Recommended.Proto3.ProtobufInput.OneofZeroString.ProtobufOutput
 Recommended.Proto3.ProtobufInput.OneofZeroUint32.ProtobufOutput
 Recommended.Proto3.ProtobufInput.OneofZeroUint64.ProtobufOutput
-Required.Proto3.ProtobufInput.UnknownVarint.ProtobufOutput
+
+# There are some non-determinism in the base 128 varints encoding too.
+# A number can be encoded as if it has any number of 0s at the front.
+# e.g. 1 can be encoded as [01], or [81 0], or [81 81 0], etc.
+# We failed these 4 tests because we do not support this non-determinism yet.
 Required.Proto3.ProtobufInput.RepeatedScalarSelectsLast.INT32.ProtobufOutput
 Required.Proto3.ProtobufInput.RepeatedScalarSelectsLast.UINT32.ProtobufOutput
 Required.Proto3.ProtobufInput.ValidDataRepeated.INT32.ProtobufOutput
 Required.Proto3.ProtobufInput.ValidDataRepeated.UINT32.ProtobufOutput
+
+# We failed this test because Protobuf 3.5 introduces the preservation of
+# unknown fields to match the Protobuf version 2 behavior. The unknown field
+# are retained during parsing and included in the serialized output.
+Required.Proto3.ProtobufInput.UnknownVarint.ProtobufOutput
