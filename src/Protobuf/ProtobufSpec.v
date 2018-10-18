@@ -793,6 +793,11 @@ Definition PB_Message_update {desc : PB_Descriptor} :=
     fun msg tag value => PB_Message_update' msg tag value
   end.
 
+(* This definition of IR Element is equivalent to the one in the paper. Notice
+   that the denotation of a base type is just the denotation of its wire type
+   and eventually we format the wire type to binary strings, so we directly use
+   wire type here for both unknown fields and singular fields. We also factor
+   out the wire type for simplicity. *)
 Inductive PB_IRElm : Type :=
 | Build_PB_IRElm : N ->
                    forall PB_IRType : PB_WireType,
