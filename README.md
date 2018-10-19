@@ -1,3 +1,6 @@
+See README.protobuf.md for the verified Protocol Buffers compiler.
+==================================================================
+
 Fiat − Deductive Synthesis of Abstract Data Types in a Proof Assistant
 ======================================================================
 
