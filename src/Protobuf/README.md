@@ -6,6 +6,14 @@ The Verified Protocol Buffer Compiler
 Our specification and implementation are test in Coq 8.8.1 (compiled with OCaml
 4.06.0).
 
+To compile the example and conformance test client in OCaml, we need a few
+libraries: `core` and `batteries`. The easiest way to install them is probably
+via opam:
+
+```
+$ opam install core batteries
+```
+
 In order to run the official example implementation and conformance test, we
 need to build the offical Protocol Buffer first. The version used in our
 experiment is 3.6.1.
