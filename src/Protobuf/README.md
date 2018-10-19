@@ -19,11 +19,14 @@ steps here for reference.
 $ git clone https://github.com/protocolbuffers/protobuf.git
 $ cd protobuf
 $ git checkout v3.6.1
+$ ./autogen.sh
 $ ./configure
 $ make
 ```
 
 ### To build the example
+
+We need to install protobuf first, either from the source (`make install`) or by other methods.
 
 ```
 $ cd examples && make cpp
