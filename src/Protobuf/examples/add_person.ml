@@ -1,6 +1,7 @@
 open Printf
 open Addressbook
 
+(* helper functions. *)
 let list_of_string s =
   List.map (fun c -> Int64.of_int (int_of_char c)) (Batteries.String.to_list s)
 
