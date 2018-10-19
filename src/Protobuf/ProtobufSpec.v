@@ -17,7 +17,6 @@ Require Import
         Fiat.Common.DecideableEnsembles
         Fiat.Common.EnumType
         Fiat.Common.ilist2
-        (* Fiat.Common.Tactics.CacheStringConstant *)
         Fiat.Common.IterateBoundedIndex
         Fiat.Computation
         Fiat.Computation.FixComp
@@ -68,7 +67,7 @@ Definition PB_WireType_denote (wty : PB_WireType) : Type :=
   | PB_LengthDelimited => list char
   end.
 
-(* Other wire types are deprecated. *)
+(* The number value of wire type *)
 Definition PB_WireType_val (wty : PB_WireType) : N :=
   match wty with
   | PB_Varint => 0
@@ -198,7 +197,7 @@ Definition PB_BaseType_toWireType (pty : PB_BaseType) : PB_WireType :=
   | PB_string => PB_LengthDelimited
   end.
 
-(* Low-level denotation for base type. *)
+(* Denotation for base type. *)
 Definition PB_BaseType_denote (pty : PB_BaseType) : Type :=
   PB_WireType_denote (PB_BaseType_toWireType pty).
 Arguments PB_BaseType_denote /.
@@ -255,7 +254,7 @@ Section PB_Descriptor_induction.
 
 End PB_Descriptor_induction.
 
-(* Handy helper functions for accessing the projections.. *)
+(* Handy helper functions for accessing the projections. *)
 Definition PB_FieldType (fld : PB_Field) := let (ty, _, _) := fld in ty.
 Definition PB_FieldName (fld : PB_Field) := let (_, name, _) := fld in name.
 Definition PB_FieldTag (fld : PB_Field) := let (_, _, tag) := fld in tag.
@@ -333,8 +332,8 @@ Proof.
   }
 Defined.
 
-(* The low-level denotation of Descriptors, Fields, Protobuf type and Base type.
-   We use the Tuple type in Fiat, which is essentially a heterogeneous list,
+(* The denotation of Descriptors, Fields, Protobuf type and Base type.
+   We use Tuple type, which is essentially a heterogeneous list,
    supporting bounded element access. *)
 Definition PB_Descriptor_heading' denote (desc : PB_Descriptor) :=
   BuildHeading (Vector.map denote (PB_DescriptorDesc desc)).

@@ -11,7 +11,6 @@ Definition NestedMessage : PB_Descriptor :=
 Definition ForeignMessage : PB_Descriptor :=
   [(PB_Singular (PB_Base PB_int32), "c", 1)].
 
-(* We use compatible types for high-level types that we don't support yet. *)
 Definition TestAllTypesProto3 : PB_Descriptor :=
   [(PB_Singular (PB_Base PB_int32), "optional_int32", 1);
    ((PB_Singular (PB_Base PB_int64)), "optional_int64", 2);
