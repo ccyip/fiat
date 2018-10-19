@@ -35,6 +35,32 @@ Proof.
   unfold N.div. rewrite H. auto.
 Qed.
 
+Lemma div_quotient_0
+  : forall a x b, a <> 0 -> (a * x + b) / a = 0 -> x = 0.
+Proof.
+  intros.
+  apply N.div_small_iff in H0; auto.
+  apply N.le_lt_trans with (n:=a * x) in H0. 2 : apply N.le_add_r.
+  rewrite N.mul_comm in H0.
+  unfold N.lt in H0.
+  rewrite N2Nat.inj_compare in H0.
+  apply Nat.compare_lt_iff in H0.
+  rewrite N2Nat.inj_mul in H0.
+  apply N2Nat.inj.
+  revert H0. generalize (N.to_nat a). generalize (N.to_nat x). simpl.
+  clear. intros.
+  destruct n. eauto. simpl in H0.
+  exfalso. apply le_not_lt in H0. apply H0. clear.
+  apply le_lt_n_Sm.
+  apply Nat.le_add_r.
+Qed.
+
+Lemma div_quotient_eq
+  : forall a x b, a <> 0 -> b < a -> (a * x + b) / a = x.
+Proof.
+  intros.
+  Admitted.
+
 Lemma div_eucl_mod_lt
   : forall a b q r, b <> 0 -> N.div_eucl a b = (q, r) -> r < b.
 Proof.
@@ -111,18 +137,28 @@ Section Varint.
 
   Definition Varint_split n := N.div_eucl n (2^7).
 
+  Definition Varint_format_step
+             (format : funType [N : Type; CacheFormat] (B * CacheFormat)) q r ce :=
+    let r' := r + (2^7) in
+    `(b1, ce1) <- format_word (NToWord 8 r') ce;
+      `(b2, ce2) <- format q ce1;
+      ret (mappend b1 b2, ce2).
+  Arguments Varint_format_step /.
+
   Definition Varint_format_body
              (format : funType [N : Type; CacheFormat] (B * CacheFormat))
     : funType [N : Type; CacheFormat] (B * CacheFormat) :=
     fun n ce =>
       let (q, r) := Varint_split n in
       match q with
-      | N0 => format_word (NToWord 8 r) ce
+      | N0 =>
+        b <- {b : bool | True};
+          if b then
+            format_word (NToWord 8 r) ce
+          else
+            Varint_format_step format q r ce
       | Npos _ =>
-        let r' := r + (2^7) in
-        `(b1, ce1) <- format_word (NToWord 8 r') ce;
-          `(b2, ce2) <- format q ce1;
-          ret (mappend b1 b2, ce2)
+        Varint_format_step format q r ce
       end.
   Arguments Varint_format_body /.
 
@@ -141,10 +177,7 @@ Section Varint.
         else
           let r := r' - (2^7) in
           `(q, b2, cd2) <- decode b1 cd1;
-            match q with
-            | N0 => None
-            | _ => Some ((2^7) * q + r, b2, cd2)
-            end.
+            Some ((2^7) * q + r, b2, cd2).
   Arguments Varint_decode_body /.
 
   Definition Varint_decode : DecodeM N B :=
@@ -156,7 +189,16 @@ Section Varint.
     unfold monotonic_function. simpl. intros.
     unfold Varint_split. 
     destruct N.div_eucl as [q r] eqn:Hdiv.
-    destruct q. reflexivity.
+    destruct q.
+    apply SetoidMorphisms.refine_bind. reflexivity.
+    intro.
+    destruct a0.
+    reflexivity.
+    apply SetoidMorphisms.refine_bind. reflexivity.
+    intro.
+    apply SetoidMorphisms.refine_bind. apply H.
+    intro.
+    reflexivity.
     apply SetoidMorphisms.refine_bind. reflexivity.
     intro.
     apply SetoidMorphisms.refine_bind. apply H.
@@ -174,7 +216,7 @@ Section Varint.
                     (fun _ _ => True)
                     Varint_format Varint_decode P.
   Proof.
-    unfold Varint_format, Varint_decode, Varint_format_body, Varint_decode_body.
+    unfold Varint_format, Varint_decode, Varint_format_body, Varint_decode_body, Varint_format_step.
     unfold Varint_split.
     eapply fix_format_correct; eauto. apply Varint_format_body_monotone.
     intros _. intros.
@@ -182,6 +224,7 @@ Section Varint.
       clear H2 H3.
       destruct N.div_eucl as [q r] eqn:Hdiv.
       destruct q. {
+        computes_to_inv2. destruct v.
         eapply (Word_decode_correct (sz := 8) (P := P)) in H4; eauto.
         destruct_many.
         eexists. repeat split; eauto.
@@ -192,6 +235,24 @@ Section Varint.
         repeat progress f_equal.
         pose proof (N.div_eucl_spec data (2^7)).
         rewrite Hdiv in H5. rewrite H5. auto.
+        computes_to_inv2.
+        pose proof H4'.
+        eapply (Word_decode_correct (sz := 8) (P := P)) in H4'; eauto.
+        destruct_many.
+        edestruct H as [[? [? [? ?]]] _]; eauto.
+        rewrite mappend_measure in H0.
+        apply format_word_some in H2; omega.
+        eexists. repeat split; eauto.
+        rewrite <- mappend_assoc. rewrite H3. simpl.
+        rewrite wordToN_NToWord_idempotent
+          by (eapply div_eucl_mod_lt_sz_add with (sz := 7%nat); eauto).
+        rewrite (proj2 (N.ltb_ge _ _))
+          by (rewrite N.add_comm; apply N.le_add_r).
+        rewrite H7. simpl.
+        repeat progress f_equal.
+        pose proof (N.div_eucl_spec data (2^7)).
+        rewrite Hdiv in H10. rewrite H10.
+        rewrite N.add_sub. reflexivity.
       } {
         computes_to_inv2.
         pose proof H4.
@@ -230,11 +291,13 @@ Section Varint.
           apply N.mod_small.
           apply N.ltb_lt. auto.
         }
-        subst. rewrite NToWord_wordToN. eauto.
+        subst. rewrite NToWord_wordToN.
+        computes_to_econstructor; eauto.
+        instantiate (1:=true). simpl.
+        eauto.
       } {
         decode_opt_to_inv.
-        destruct x4. easy.
-        injections.
+        subst.
         edestruct H as [_ [? [? [? [? [? [? ?]]]]]]]; eauto.
         rewrite mappend_measure in H0. 
         apply format_word_some in H5; omega.
@@ -247,22 +310,34 @@ Section Varint.
           replace (2^7 + 2^7) with (2^(N.of_nat 8)) by auto.
           rewrite Npow2_N. apply wordToN_bound.
         }
-        assert (q = (N.pos p)) as L1. {
-          apply div_eucl_div in Hdiv. subst.
-          symmetry.
-          eapply N.div_unique; eauto.
-        }
         assert (r = (wordToN x - (2^7))) as L2. {
           apply div_eucl_mod in Hdiv. subst.
           symmetry.
           eapply N.mod_unique; eauto.
         }
+        destruct q.
+        computes_to_econstructor; eauto.
+        instantiate (2:=false). simpl.
         subst.
         rewrite N.sub_add by (apply N.ltb_ge; auto).
         rewrite NToWord_wordToN.
         computes_to_econstructor; eauto.
         computes_to_econstructor; eauto.
-        simpl. apply mappend_assoc.
+        apply div_eucl_div in Hdiv. symmetry in Hdiv.
+        apply div_quotient_0 in Hdiv. subst.
+        simpl. eassumption. inversion 1.
+        eauto.
+        subst.
+        rewrite N.sub_add by (apply N.ltb_ge; auto).
+        rewrite NToWord_wordToN.
+        computes_to_econstructor; eauto.
+        computes_to_econstructor; eauto.
+        simpl.
+        replace x4 with (N.pos p) in *.
+        eassumption.
+        2 : auto. 2 : apply mappend_assoc.
+        apply div_eucl_div in Hdiv.
+        rewrite div_quotient_eq in Hdiv. auto. inversion 1. auto.
       }
     }
 
@@ -270,6 +345,7 @@ Section Varint.
     decode_opt_to_inv. rewrite H0. simpl.
     destruct N.ltb; eauto.
     decode_opt_to_inv. erewrite H; eauto.
+    auto.
   Qed.
 
   Lemma Varint_decode_lt
@@ -287,7 +363,7 @@ Section Varint.
       injections. auto.
     } {
       decode_opt_to_inv.
-      destruct x2. easy. injections.
+      subst.
       apply IHn in H0.
       unfold lt_B in *. omega.
     }
@@ -327,6 +403,7 @@ Section Varint.
     unfold Varint_format_body in *.
     unfold Varint_split in *.
     destruct N.div_eucl eqn:Hdiv. destruct n. {
+      computes_to_inv2. destruct v0.
       eapply word_format_eq; eauto.
     } {
       computes_to_inv2.
