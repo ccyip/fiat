@@ -369,23 +369,6 @@ End Word.
 (*     subst; eauto. *)
 (* Qed. *)
 
-Add Parametric Morphism
-    S T
-    (cache : Cache)
-    (decode : DecodeM S T)
-  : (fun format =>
-       @CorrectDecoder_simpl S T cache format decode)
-    with signature (EquivFormat ==> impl)
-      as format_decode_correct_refineEquiv.
-Proof.
-  unfold EquivFormat, impl, pointwise_relation, CorrectDecoder_simpl;
-    intuition eauto; intros.
-  - eapply H1; eauto; apply H; eauto.
-  - destruct (H2 _ _ _ _ _ H0 H3) as [ ? [? ?] ];
-      intuition.
-    repeat eexists; intuition eauto; apply H; eauto.
-Qed.
-
 Theorem unused_word_decode_correct
         {sz : nat}
         {T}

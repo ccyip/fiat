@@ -305,6 +305,42 @@ Section Specifications.
 
 End Specifications.
 
+Definition EquivFormat {S T} {cache : Cache}
+           (format1 format2 : FormatM S T) :=
+  forall s env, refineEquiv (format1 s env) (format2 s env).
+
+Lemma EquivFormat_sym {S T} {cache : Cache} :
+  forall (FormatSpec FormatSpec'  : FormatM S T),
+    EquivFormat FormatSpec FormatSpec'
+    -> EquivFormat FormatSpec' FormatSpec.
+Proof.
+  unfold EquivFormat, refineEquiv; intuition eauto;
+    eapply H.
+Qed.
+
+Add Parametric Morphism
+    A B
+    (cache : Cache)
+    (monoid : Monoid B)
+    (predicate : A -> Prop)
+    rest_predicate
+    (decode : B -> CacheDecode -> option (A * B * CacheDecode))
+    (decode_inv : CacheDecode -> Prop)
+  : (fun format =>
+       @CorrectDecoder A B cache monoid predicate
+                                rest_predicate format decode decode_inv)
+    with signature (EquivFormat ==> impl)
+      as format_decode_correct_refineEquiv.
+Proof.
+  unfold EquivFormat, impl, pointwise_relation, CorrectDecoder;
+    intuition eauto; intros.
+  - eapply H1; eauto; apply H; eauto.
+  - eapply H2; eauto.
+  - destruct (H2 _ _ _ _ _ _ H0 H3 H4) as [ ? [? [? ?] ] ];
+      intuition.
+    repeat eexists; intuition eauto; apply H; eauto.
+Qed.
+
 Definition Cache_plus_inv (cache : Cache)
            (decode_inv : @CacheDecode cache -> Prop): Cache :=
   {| CacheFormat := @CacheFormat cache;
@@ -322,30 +358,30 @@ Definition decode_strict
          Then Some (fst abscd', mempty, snd abscd')
          Else None.
 
-Lemma CorrectDecoder_simpl_equiv_format
+Add Parametric Morphism
       {A B}
       (cache : Cache)
-  : forall (format format' : FormatM A B)
-           (decode : DecodeM A B),
-    CorrectDecoder_simpl format decode
-    -> (forall a env b env', format a env (b, env') <-> format' a env (b, env'))
-    -> CorrectDecoder_simpl format' decode.
+      (decode : DecodeM A B)
+  : (fun format =>
+       @CorrectDecoder_simpl A B cache format decode)
+    with signature (EquivFormat ==> impl)
+      as CorrectDecoder_simpl_equiv_format.
 Proof.
-  unfold CorrectDecoder_simpl; intros; split_and; split; intros.
-  - eapply H1; eauto.
-    apply unfold_computes; apply unfold_computes in H3; apply H0; eauto.
-  - eapply H2 in H3; eauto.
-    destruct_ex; split_and; rewrite unfold_computes in H4.
-    eexists; rewrite unfold_computes; split; eauto; apply H0; eauto.
+  unfold EquivFormat, impl, CorrectDecoder_simpl;
+    intuition eauto; intros.
+  - eapply H1; eauto; apply H; eauto.
+  - destruct (H2 _ _ _ _ _ H0 H3) as [ ? [? ?] ];
+      intuition.
+    repeat eexists; intuition eauto; apply H; eauto.
 Qed.
 
 Lemma CorrectDecoder_simpl_equiv_decode
       {A B}
       (cache : Cache)
   : forall (format : FormatM A B)
-           (decode decode' : DecodeM A B),
-    CorrectDecoder_simpl format decode
-    -> (forall env b, decode b env = decode' b env)
+      (decode decode' : DecodeM A B),
+    (forall env b, decode b env = decode' b env)
+    -> CorrectDecoder_simpl format decode
     -> CorrectDecoder_simpl format decode'.
 Proof.
   unfold CorrectDecoder_simpl; intros; split_and; split; intros.
@@ -685,42 +721,6 @@ Proof.
   destruct a_opt' as [ [ [? ?] ?] | ]; simpl; intros.
   erewrite a_opt_eq_Some; simpl; eauto.
   erewrite a_opt_eq_None; simpl; eauto.
-Qed.
-
-Definition EquivFormat {S T} {cache : Cache}
-           (format1 format2 : FormatM S T) :=
-  forall s env, refineEquiv (format1 s env) (format2 s env).
-
-Lemma EquivFormat_sym {S T} {cache : Cache} :
-  forall (FormatSpec FormatSpec'  : FormatM S T),
-    EquivFormat FormatSpec FormatSpec'
-    -> EquivFormat FormatSpec' FormatSpec.
-Proof.
-  unfold EquivFormat, refineEquiv; intuition eauto;
-    eapply H.
-Qed.
-
-Add Parametric Morphism
-    A B
-    (cache : Cache)
-    (monoid : Monoid B)
-    (predicate : A -> Prop)
-    rest_predicate
-    (decode : B -> CacheDecode -> option (A * B * CacheDecode))
-    (decode_inv : CacheDecode -> Prop)
-  : (fun format =>
-       @CorrectDecoder A B cache monoid predicate
-                                rest_predicate format decode decode_inv)
-    with signature (EquivFormat ==> impl)
-      as format_decode_correct_refineEquiv.
-Proof.
-  unfold EquivFormat, impl, pointwise_relation, CorrectDecoder;
-    intuition eauto; intros.
-  - eapply H1; eauto; apply H; eauto.
-  - eapply H2; eauto.
-  - destruct (H2 _ _ _ _ _ _ H0 H3 H4) as [ ? [? [? ?] ] ];
-      intuition.
-    repeat eexists; intuition eauto; apply H; eauto.
 Qed.
 
 Section DecodeWMeasure.
