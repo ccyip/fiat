@@ -24,9 +24,9 @@ Section ComposeFormat.
 
   Definition Compose_Decode {S' : Type}
              (decode : DecodeM S' T)
-             (g : S' -> S) (* Transformation Function *)
+             (g : S' -> option S) (* Transformation Function *)
     : DecodeM S T  :=
-    fun b env => `(s, env') <- decode b env; Some (g s, env').
+    fun b env => `(s, env') <- decode b env; match g s with | Some s => Some (s, env') | None => None end.
 
   Definition Compose_Encode
              {S' : Type}
@@ -39,11 +39,11 @@ Section ComposeFormat.
         (format : FormatM S' T)
         (decode : DecodeM S' T)
         (f : S -> S' -> Prop) (* Transformation Relation *)
-        (g : S' -> S) (* Transformation Function *)
+        (g : S' -> option S) (* Transformation Function *)
         (format_decode_corect : CorrectDecoder_simpl format decode)
         (g_inverts_f : forall s s' env benv,
-            format s' env benv -> f s s' -> g s' = s)
-        (g_OK : forall s, f (g s) s)
+            format s' env benv -> f s s' -> g s' = Some s)
+        (g_OK : forall s s', g s' = Some s -> f s s')
     : CorrectDecoder_simpl (Compose_Format format f) (Compose_Decode decode g).
   Proof.
     unfold CorrectDecoder_simpl, Compose_Decode, Compose_Format in *; split; intros.
@@ -54,9 +54,11 @@ Section ComposeFormat.
       rewrite <- unfold_computes in H3.
       eapply H1 in H3; destruct_ex; intuition eauto.
       eexists; rewrite H5; simpl; intuition eauto.
+      rewrite H0.
       subst; eauto.
     }
     { apply_in_hyp DecodeBindOpt_inv; destruct_ex; intuition.
+      destruct (g x) eqn:?; [inversion_clear H4 | easy].
       eapply H2 in H3; eauto; injections.
       destruct_ex; eexists; intuition eauto.
       apply unfold_computes.
@@ -141,6 +143,22 @@ Section ComposeSpecializations.
     - subst; eauto.
     - apply functional_extensionality; intros; unfold Compose_Encode;
         find_if_inside; reflexivity.
+  Qed.
+
+  Corollary CorrectDecoder_Restrict_Format
+        (format : FormatM S T)
+        (decode : DecodeM S T)
+        (P : S -> Prop)
+        (decideable_P : DecideableEnsemble P)
+        (format_decode_corect : CorrectDecoder_simpl format decode)
+    : CorrectDecoder_simpl (Restrict_Format P format)
+                           (Compose_Decode decode (fun s => if (DecideableEnsembles.dec s) then Some s else None)).
+  Proof.
+    apply CorrectDecoder_Compose; eauto; intuition; subst;
+      destruct (DecideableEnsembles.dec s') eqn: ?; eauto;
+      try first [congruence | easy].
+    - exfalso. eapply Decides_false; eauto.
+    - eapply dec_decides_P; eauto.
   Qed.
 
   Definition Projection_Format
