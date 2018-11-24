@@ -344,30 +344,30 @@ Section Word.
 
   Definition decode_unused_word
     : DecodeM (unit * T) T :=
-    Compose_Decode decode_word (fun wt => (tt, snd wt)).
+    Compose_Decode decode_word (fun wt => Some (tt, snd wt)).
 
 End Word.
 
-Lemma EquivFormat_LaxTerminal {S T}
-        {monoid' : Monoid T}
-        {cache' : Cache}
-  : forall format : FormatM S T,
-    EquivFormat (Projection_Format format fst ++ LaxTerminal_Format) (DoneLax format) .
-Proof.
-  unfold EquivFormat, DoneLax, Projection_Format, Compose_Format, LaxTerminal_Format,
-  sequence_Format, ComposeOpt.compose, Bind2;
-    split; unfold refine; intros.
-  - rewrite unfold_computes in H; destruct_ex; split_and; subst.
-    destruct v; destruct s; simpl in *; subst.
-    repeat computes_to_econstructor; eauto.
-    rewrite unfold_computes; eexists; split; eauto.
-    rewrite unfold_computes; eauto.
-    simpl; computes_to_econstructor.
-  - computes_to_inv; subst.
-    rewrite unfold_computes in H; rewrite unfold_computes.
-    destruct_ex; destruct v0; eexists; simpl in *; intuition eauto.
-    subst; eauto.
-Qed.
+(* Lemma EquivFormat_LaxTerminal {S T} *)
+(*         {monoid' : Monoid T} *)
+(*         {cache' : Cache} *)
+(*   : forall format : FormatM S T, *)
+(*     EquivFormat (Projection_Format format fst ++ LaxTerminal_Format) (DoneLax format) . *)
+(* Proof. *)
+(*   unfold EquivFormat, DoneLax, Projection_Format, Compose_Format, LaxTerminal_Format, *)
+(*   sequence_Format, ComposeOpt.compose, Bind2; *)
+(*     split; unfold refine; intros. *)
+(*   - rewrite unfold_computes in H; destruct_ex; split_and; subst. *)
+(*     destruct v; destruct s; simpl in *; subst. *)
+(*     repeat computes_to_econstructor; eauto. *)
+(*     rewrite unfold_computes; eexists; split; eauto. *)
+(*     rewrite unfold_computes; eauto. *)
+(*     simpl; computes_to_econstructor. *)
+(*   - computes_to_inv; subst. *)
+(*     rewrite unfold_computes in H; rewrite unfold_computes. *)
+(*     destruct_ex; destruct v0; eexists; simpl in *; intuition eauto. *)
+(*     subst; eauto. *)
+(* Qed. *)
 
 Add Parametric Morphism
     S T

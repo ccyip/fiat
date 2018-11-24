@@ -2,7 +2,8 @@ Require Import
         Fiat.Computation
         Fiat.Common.DecideableEnsembles
         Fiat.Narcissus.Common.Specs
-        Fiat.Narcissus.Common.Notations.
+        Fiat.Narcissus.Common.Notations
+        Fiat.Narcissus.Formats.Base.FMapFormat.
 
 Set Implicit Arguments.
 
@@ -163,7 +164,7 @@ Lemma compose_format_correct_simpl
                       decode1)
       (decode2 : A' -> B -> CacheDecode -> option (A * CacheDecode))
       (decode2_pf : forall proj,
-          CorrectDecoder_simpl (RestrictFormat format2 (fun data => project data = proj))
+          CorrectDecoder_simpl (Restrict_Format (fun data => project data = proj) format2)
                                (decode2 proj))
   : CorrectDecoder_simpl
       (fun (data : A) (ctx : CacheFormat) =>
@@ -182,7 +183,8 @@ Proof.
     rewrite unfold_computes in H0; simpl; eauto.
     specialize (decode2_pf (project data)); destruct decode2_pf.
     destruct (H5 c x xenv data b0 H4) as [? [? ?] ].
-    unfold RestrictFormat; rewrite unfold_computes; intuition.
+    apply Restrict_Format_simpl.
+    rewrite unfold_computes; intuition.
     rewrite H3; simpl; rewrite H7; eauto. }
   { intros.
     destruct (decode1 bin env') as [ [ [? ?] ? ] | ] eqn : ? ;
@@ -193,7 +195,8 @@ Proof.
       destruct_ex; intuition; subst.
     eapply (proj2 (decode2_pf _)) in H0; eauto.
     destruct H0 as [? ?]; destruct_ex; intuition; subst.
-    unfold RestrictFormat in H1; rewrite unfold_computes in H1; intuition.
+    apply Restrict_Format_simpl in H1.
+    rewrite unfold_computes in H1; intuition.
     rewrite H5.
     unfold compose; eexists; intuition eauto.
     repeat first [computes_to_econstructor

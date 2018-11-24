@@ -112,6 +112,16 @@ Section ComposeSpecializations.
     : FormatM S T
     := Compose_Format format (fun s s' => s = s' /\ P s').
 
+  Lemma Restrict_Format_simpl P format
+    : EquivFormat (Restrict_Format P format)
+                  (fun s env benv => format s env ∋ benv /\ P s).
+  Proof.
+    unfold Restrict_Format, Compose_Format.
+    split; intros ? ?; rewrite unfold_computes in *.
+    - intuition. eexists; intuition eauto.
+    - destruct_ex. intuition congruence.
+  Qed.
+
   Corollary CorrectEncoder_Restrict_Format
             (format : FormatM S T)
             (encode : EncodeM S T)
