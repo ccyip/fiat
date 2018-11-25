@@ -144,3 +144,25 @@ Section Specifications.
 
 End Specifications.
 
+(* Option monad. *)
+Definition BindOpt {A B}
+           (a_opt : option A)
+           (k : A -> option B) :=
+  Ifopt a_opt as a Then k a Else None.
+
+Notation "a <- c ; k" :=
+  (BindOpt c%format (fun a => k%format)) : format_scope.
+
+Lemma BindOpt_inv {A B}
+      (a_opt : option A)
+      (b : B)
+      (k : A -> option B)
+  : BindOpt a_opt k = Some b ->
+    exists a',
+      a_opt = Some a' /\ k a' = Some b.
+Proof.
+  intros. destruct a_opt.
+  simpl in H.
+  eexists; intuition eauto.
+  easy.
+Qed.
