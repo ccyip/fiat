@@ -1,85 +1,65 @@
 Require Import
         Fiat.Common.ilist
         Fiat.Common.IterateBoundedIndex
-        Fiat.Narcissus.Common.Specs.
-
-Require Import
-        Coq.Sets.Ensembles.
+        Fiat.Narcissus.Common.SpecsSimpl.
 
 Section UnionFormat.
 
   Context {S : Type}. (* Source Type *)
   Context {T : Type}. (* Target Type *)
-  Context {cache : Cache}. (* State Type *)
 
-  Definition Union_Format {m}
-             (formats : Vector.t (FormatM S T) m)
+  Definition Union_Format
+             (format1 format2 : FormatM S T)
     : FormatM S T :=
-    fun s env tenv' =>
-      exists idx, Vector.nth formats idx s env ∋ tenv'.
+    fun s t =>
+      format1 s ∋ t \/ format2 s ∋ t.
 
   Definition Union_Decode
-             {m}
-             (decoders : Vector.t (DecodeM S T) m)
-             (idx : Fin.t m)
-    : DecodeM S T := Vector.nth decoders idx.
+             (decode1 decode2 : DecodeM S T)
+             (choose : T -> bool)
+    : DecodeM S T := fun t => if choose t then decode1 t else decode2 t.
 
   Definition Union_Encode
-             {m}
-             (encoders : Vector.t (EncodeM S T) m)
-             (idx : S -> Fin.t m)
-    : EncodeM S T := fun s => Vector.nth encoders (idx s) s.
+             (encode1 encode2 : EncodeM S T)
+             (choose : S -> bool)
+    : EncodeM S T := fun s => if choose s then encode1 s else encode2 s.
 
-  Lemma CorrectDecoder_Union {m}
-        (formats : Vector.t (FormatM S T) m)
-        (decoders : Vector.t (DecodeM S T) m)
-        (correct_decoders :
-           Iterate_Ensemble_BoundedIndex'
-             (fun idx =>
-                CorrectDecoder_simpl (Vector.nth formats idx) (Vector.nth decoders idx)))
-        (idx : Fin.t m)
+  Lemma CorrectDecoder_Union
+        (format1 format2 : FormatM S T)
+        (decode1 decode2 : DecodeM S T)
+        (decode1_correct : CorrectDecoder_simpl format1 decode1)
+        (decode2_correct : CorrectDecoder_simpl format2 decode2)
+        (choose : T -> bool)
         (unique_format :
-           forall s env t env',
-             (Union_Format formats s env ∋ (t, env') ->
-              Vector.nth formats idx s env ∋ (t, env')))
-    : CorrectDecoder_simpl (Union_Format formats) (Union_Decode decoders idx).
+           forall s t,
+             Union_Format format1 format2 s ∋ t ->
+             if choose t then format1 s ∋ t else format2 s ∋ t)
+    : CorrectDecoder_simpl (Union_Format format1 format2) (Union_Decode decode1 decode2 choose).
   Proof.
-    unfold CorrectDecoder_simpl, Union_Decode, Union_Format in *; split; intros.
-    { eapply unique_format in H0.
-      eapply Iterate_Ensemble_equiv' in correct_decoders.
-      eapply correct_decoders in H0; eauto.
-    }
-    { eapply Iterate_Ensemble_equiv' in correct_decoders.
-      eapply correct_decoders in H0; eauto.
-      destruct_ex; intuition; eexists; split; eauto.
-      apply unfold_computes.
-      eexists; intuition eauto.
-    }
+    unfold Union_Decode, Union_Format in *; split; intros;
+      rewrite @unfold_computes in *.
+    - apply (unique_format s t) in H.
+      find_if_inside; apply decode1_correct || apply decode2_correct; auto.
+    - find_if_inside; apply decode1_correct in H || apply decode2_correct in H; auto.
   Qed.
 
-  Lemma CorrectEncoder_Union {m}
-        (formats : Vector.t (FormatM S T) m)
-        (encoders : Vector.t (EncodeM S T) m)
-        (correct_encoders :
-           Iterate_Ensemble_BoundedIndex'
-             (fun idx =>
-                CorrectEncoder (Vector.nth formats idx) (Vector.nth encoders idx)))
-        (f_idx :
-           forall (s : S),
-             { idx : _ & forall env t env',
-                   Union_Format formats s env ∋ (t, env') ->
-                   Vector.nth formats idx s env ∋ (t, env')})
-    : CorrectEncoder (Union_Format formats) (Union_Encode encoders (fun s => projT1 (f_idx s))).
+  Lemma CorrectEncoder_Union
+        (format1 format2 : FormatM S T)
+        (encode1 encode2 : EncodeM S T)
+        (encode1_correct : CorrectEncoder format1 encode1)
+        (encode2_correct : CorrectEncoder format2 encode2)
+        (choose : S -> bool)
+        (unique_format :
+           forall s t,
+             Union_Format format1 format2 s ∋ t ->
+             if choose s then format1 s ∋ t else format2 s ∋ t)
+    : CorrectEncoder (Union_Format format1 format2) (Union_Encode encode1 encode2 choose).
   Proof.
-    unfold CorrectEncoder, Union_Encode, Union_Format in *; split; intros.
-    - apply Iterate_Ensemble_equiv' with (idx := projT1 (f_idx a)) in correct_encoders.
-      eapply correct_encoders in H.
-      apply unfold_computes; eauto.
-    - intro; apply_in_hyp @unfold_computes; eauto.
-      pose proof (projT2 (f_idx a) env _ _ H0); simpl in *.
-      apply Iterate_Ensemble_equiv' with (idx := projT1 (f_idx a)) in correct_encoders.
-      eapply correct_encoders in H.
-      apply H; eauto.
+    unfold Union_Encode, Union_Format in *; split; intros;
+      rewrite @unfold_computes in *.
+    - find_if_inside; apply encode1_correct in H || apply encode2_correct in H; auto.
+    - intro. apply (unique_format s t) in H0.
+      find_if_inside; apply encode1_correct in H0 || apply encode2_correct in H0; eauto.
   Qed.
 
 End UnionFormat.
