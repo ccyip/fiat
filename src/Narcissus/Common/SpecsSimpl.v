@@ -65,6 +65,11 @@ Section Specifications.
       eapply H.
   Qed.
 
+  Definition DisjointFormat (format1 format2 : FormatM) :=
+    forall s1 t1, format1 s1 ∋ t1 ->
+             forall s2 t2, format2 s2 ∋ t2 ->
+                      t1 <> t2.
+
   Lemma CorrectDecoder_CorrectEncoder_inverse
     : forall (format : FormatM)
         (encode : EncodeM)

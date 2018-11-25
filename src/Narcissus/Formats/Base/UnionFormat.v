@@ -33,7 +33,7 @@ Section UnionFormat.
         (unique_format :
            forall s t,
              Union_Format format1 format2 s ∋ t ->
-             if choose t then format1 s ∋ t else format2 s ∋ t)
+             if choose t then format1 s ∋ t else format2 s ∋ t) (* implies target disjoint. *)
     : CorrectDecoder_simpl (Union_Format format1 format2) (Union_Decode decode1 decode2 choose).
   Proof.
     unfold Union_Decode, Union_Format in *; split; intros;
@@ -60,6 +60,28 @@ Section UnionFormat.
     - find_if_inside; apply encode1_correct in H || apply encode2_correct in H; auto.
     - intro. apply (unique_format s t) in H0.
       find_if_inside; apply encode1_correct in H0 || apply encode2_correct in H0; eauto.
+  Qed.
+
+  (* Expensive but works well as a fallback chooser. *)
+  Definition Choose_by_decode (decode : DecodeM S T) :=
+    fun t => if decode t then true else false.
+
+  Lemma Choose_by_decode_unique_format
+        (format1 format2 : FormatM S T)
+        (decode1 decode2 : DecodeM S T)
+        (decode1_correct : CorrectDecoder_simpl format1 decode1)
+        (decode2_correct : CorrectDecoder_simpl format2 decode2)
+        (format_disjoint : DisjointFormat format1 format2)
+    : forall s t,
+      Union_Format format1 format2 s ∋ t ->
+      if Choose_by_decode decode1 t then format1 s ∋ t else format2 s ∋ t.
+  Proof.
+    unfold Choose_by_decode. intros.
+    destruct H.
+    - pose proof H. apply decode1_correct in H. rewrite H. auto.
+    - destruct (decode1 t) eqn:?; auto.
+      apply decode1_correct in Heqo.
+      exfalso. eapply format_disjoint; eauto.
   Qed.
 
 End UnionFormat.
