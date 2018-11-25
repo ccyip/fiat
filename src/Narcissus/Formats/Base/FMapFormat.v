@@ -6,97 +6,100 @@ Require Import
 Require Import
         Fiat.Common.DecideableEnsembles
         Fiat.Computation
-        Fiat.Narcissus.Common.Specs.
+        Fiat.Narcissus.Common.SpecsSimpl.
 
 Section ComposeFormat.
 
   Context {S : Type}. (* Source Type *)
   Context {T : Type}. (* Target Type *)
-  Context {cache : Cache}. (* State Type *)
   Context {S' : Type}. (* Transformed Type *)
 
   Definition Compose_Format
-    (format : FormatM S' T)
-      (f : S -> S' -> Prop) (* Transformation Relation *)
+             (format1 : FormatM S' T)
+             (format2 : FormatM S S') (* Transformation Relation *)
     : FormatM S T :=
-    fun s env benv' =>
-      exists s', format s' env ∋ benv' /\ f s s'.
+    fun s t =>
+      exists s', format1 s' ∋ t /\ format2 s ∋ s'.
 
-  Definition Compose_Decode {S' : Type}
-             (decode : DecodeM S' T)
-             (g : S' -> option S) (* Transformation Function *)
-    : DecodeM S T  :=
-    fun b env => `(s, env') <- decode b env; match g s with | Some s => Some (s, env') | None => None end.
+  (* Equivalent definition. *)
+  Definition Compose_Format'
+             (format1 : FormatM S' T)
+             (format2 : FormatM S S')
+    : FormatM S T :=
+    (fun s => s' <- format2 s; format1 s')%comp.
+
+  Definition Compose_Decode
+             (decode1 : DecodeM S' T)
+             (decode2 : DecodeM S S') (* Transformation Function *)
+    : DecodeM S T :=
+    fun t => s <- decode1 t; decode2 s.
 
   Definition Compose_Encode
-             {S' : Type}
-             (encode : EncodeM S' T)
-             (f' : S -> option S')
+             (encode1 : EncodeM S' T)
+             (encode2 : EncodeM S S')
     : EncodeM S T :=
-    fun s => Ifopt f' s as s' Then encode s' Else fun _ => None.
+    fun s => s' <- encode2 s; encode1 s'.
+
+  Lemma Compose_Format_equiv format1 format2
+    : EquivFormat (Compose_Format format1 format2) (Compose_Format' format1 format2).
+  Proof.
+    unfold Compose_Format, Compose_Format'.
+    split; intros ? ?.
+    - computes_to_inv. rewrite unfold_computes. eauto.
+    - rewrite unfold_computes in H. destruct_ex.
+      computes_to_econstructor; intuition eauto.
+  Qed.
 
   Lemma CorrectDecoder_Compose
-        (format : FormatM S' T)
-        (decode : DecodeM S' T)
-        (f : S -> S' -> Prop) (* Transformation Relation *)
-        (g : S' -> option S) (* Transformation Function *)
-        (format_decode_corect : CorrectDecoder_simpl format decode)
-        (g_inverts_f : forall s s' env benv,
-            format s' env benv -> f s s' -> g s' = Some s)
-        (g_OK : forall s s', g s' = Some s -> f s s')
-    : CorrectDecoder_simpl (Compose_Format format f) (Compose_Decode decode g).
+        (format1 : FormatM S' T)
+        (decode1 : DecodeM S' T)
+        (format2 : FormatM S S') (* Transformation Relation *)
+        (decode2 : DecodeM S S') (* Transformation Function *)
+        (* TODO: The following two assumptions could be weakened in more than
+           one way. Observe that S' is actually restricted to the intersection
+           of the range of format2 and the domain of format1. *)
+        (decode1_correct : CorrectDecoder_simpl format1 decode1)
+        (decode2_correct : CorrectDecoder_simpl format2 decode2)
+    : CorrectDecoder_simpl (Compose_Format format1 format2) (Compose_Decode decode1 decode2).
   Proof.
-    unfold CorrectDecoder_simpl, Compose_Decode, Compose_Format in *; split; intros.
-    { rewrite @unfold_computes in H0.
+    unfold Compose_Decode, Compose_Format in *; split; intros.
+    - rewrite unfold_computes in H.
       destruct_ex; intuition.
-      rewrite @unfold_computes in H3.
-      pose proof (g_inverts_f  _ _ _ _ H3 H4).
-      rewrite <- unfold_computes in H3.
-      eapply H1 in H3; destruct_ex; intuition eauto.
-      eexists; rewrite H5; simpl; intuition eauto.
-      rewrite H0.
-      subst; eauto.
-    }
-    { apply_in_hyp DecodeBindOpt_inv; destruct_ex; intuition.
-      destruct (g x) eqn:?; [inversion_clear H4 | easy].
-      eapply H2 in H3; eauto; injections.
-      destruct_ex; eexists; intuition eauto.
-      apply unfold_computes.
-      eexists; intuition eauto.
-    }
+      apply decode1_correct in H0.
+      apply decode2_correct in H1.
+      rewrite H0. simpl. assumption.
+    - rewrite unfold_computes.
+      apply BindOpt_inv in H. destruct_ex. intuition.
+      apply decode1_correct in H0. apply decode2_correct in H1.
+      eexists. intuition eauto.
   Qed.
 
   Lemma CorrectEncoder_Compose
-        (format : FormatM S' T)
-        (encode : EncodeM S' T)
-        (f : S -> S' -> Prop)
-        (f' : S -> option S')
-        (f'_refines_f_1 :
+        (format1 : FormatM S' T)
+        (encode1 : EncodeM S' T)
+        (format2 : FormatM S S')
+        (encode2 : EncodeM S S')
+        (encode1_correct : CorrectEncoder format1 encode1)
+        (encode2_correct : CorrectEncoder format2 encode2)
+        (encode2_sound_choice :
            forall s s',
-             f' s = Some s' ->
-             f s s')
-        (f'_refines_f_2 :
-           forall s,
-             f' s = None ->
-             forall s', ~ f s s')
-        (f'_sound_choice :
-           forall s s',
-             f' s = Some s' ->
-             forall x env benv,
-               format x env ∋ benv
-               -> f s x
-               -> format s' env ∋ benv)
-    : CorrectEncoder format encode
-      -> CorrectEncoder (Compose_Format format f) (Compose_Encode encode f').
+             encode2 s = Some s' ->
+             forall x t,
+               format1 x ∋ t ->
+               format2 s ∋ x ->
+               format1 s' ∋ t)
+    : CorrectEncoder (Compose_Format format1 format2) (Compose_Encode encode1 encode2).
   Proof.
-    unfold CorrectEncoder, Compose_Encode, Compose_Format in *; split; intros.
+    unfold Compose_Encode, Compose_Format in *; split; intros.
     - apply unfold_computes.
-      destruct (f' a) eqn: ?; simpl in *; try discriminate.
-      eapply H in H0; eexists; intuition eauto.
-    - rewrite unfold_computes; intro;  destruct_ex; split_and.
-      destruct (f' a) eqn: ?; simpl in *; try discriminate.
-      eapply H4; eauto.
-      eapply f'_refines_f_2; eauto.
+      apply BindOpt_inv in H. destruct_ex. intuition.
+      apply encode1_correct in H1.
+      apply encode2_correct in H0.
+      eexists. intuition eauto.
+    - rewrite unfold_computes; intro; destruct_ex; split_and.
+      destruct (encode2 s) eqn:?; simpl in *.
+      eapply encode1_correct; eauto.
+      eapply encode2_correct; eauto.
   Qed.
 
 End ComposeFormat.
@@ -105,7 +108,6 @@ Section ComposeSpecializations.
 
   Context {S : Type}. (* Source Type *)
   Context {T : Type}. (* Target Type *)
-  Context {cache : Cache}. (* State Type *)
   Context {S' : Type}. (* Transformed Type *)
 
   Definition Restrict_Format
@@ -116,12 +118,13 @@ Section ComposeSpecializations.
 
   Lemma Restrict_Format_simpl P format
     : EquivFormat (Restrict_Format P format)
-                  (fun s env benv => format s env ∋ benv /\ P s).
+                  (fun s t => format s ∋ t /\ P s).
   Proof.
     unfold Restrict_Format, Compose_Format.
     split; intros ? ?; rewrite unfold_computes in *.
-    - intuition. eexists; intuition eauto.
-    - destruct_ex. intuition congruence.
+    - intuition. eexists. intuition eauto.
+      rewrite unfold_computes. intuition eauto.
+    - destruct_ex. intuition; rewrite @unfold_computes in *; intuition congruence.
   Qed.
 
   Corollary CorrectEncoder_Restrict_Format
@@ -129,20 +132,21 @@ Section ComposeSpecializations.
             (encode : EncodeM S T)
             (P : S -> Prop)
             (decideable_P : DecideableEnsemble P)
-    : CorrectEncoder format encode
-      -> CorrectEncoder (Restrict_Format P format) (fun s => if (DecideableEnsembles.dec s) then encode s else fun _ => None).
+    : CorrectEncoder format encode ->
+      CorrectEncoder (Restrict_Format P format)
+                     (fun s => if (DecideableEnsembles.dec s) then encode s else None).
   Proof.
-    intros; replace
-              (fun s : S => if DecideableEnsembles.dec s then encode s else fun _ : CacheFormat => None)
-              with (Compose_Encode encode (fun s => if DecideableEnsembles.dec s then Some s else None)).
-    eapply CorrectEncoder_Compose; intros;
-      try (destruct (DecideableEnsembles.dec s) eqn: ?; first [discriminate | injections]);
+    intros.
+    eapply CorrectEncoder_equiv_encode
+      with (Compose_Encode encode (fun s => if DecideableEnsembles.dec s then Some s else None)).
+    intros; unfold Compose_Encode. find_if_inside; reflexivity.
+    eapply CorrectEncoder_Compose; intros; eauto; try split; intros;
+      rewrite @unfold_computes in *;
+      destruct (DecideableEnsembles.dec s) eqn:?; discriminate || injections;
       intuition eauto.
     - eapply dec_decides_P; eauto.
     - eapply Decides_false; subst; eauto.
-    - subst; eauto.
-    - apply functional_extensionality; intros; unfold Compose_Encode;
-        find_if_inside; reflexivity.
+    - congruence.
   Qed.
 
   Corollary CorrectDecoder_Restrict_Format
@@ -154,9 +158,10 @@ Section ComposeSpecializations.
     : CorrectDecoder_simpl (Restrict_Format P format)
                            (Compose_Decode decode (fun s => if (DecideableEnsembles.dec s) then Some s else None)).
   Proof.
-    apply CorrectDecoder_Compose; eauto; intuition; subst;
-      destruct (DecideableEnsembles.dec s') eqn: ?; eauto;
-      try first [congruence | easy].
+    apply CorrectDecoder_Compose; eauto.
+    split; intuition;
+      rewrite @unfold_computes in *;
+      destruct (DecideableEnsembles.dec t) eqn: ?; intuition; try first [congruence | easy].
     - exfalso. eapply Decides_false; eauto.
     - eapply dec_decides_P; eauto.
   Qed.
@@ -175,24 +180,23 @@ Section ComposeSpecializations.
   Proof.
     unfold EquivFormat, Projection_Format, Compose_Format; split; intros ? ?.
     apply unfold_computes.
-    eexists; eauto.
-    rewrite unfold_computes in H; destruct_ex; intuition; subst; eauto.
+    eexists. intuition eauto. apply unfold_computes. reflexivity.
+    rewrite unfold_computes in H; destruct_ex; intuition.
+    rewrite unfold_computes in H1. subst; eauto.
   Qed.
 
   Corollary CorrectEncoder_Projection_Format
             (format : FormatM S' T)
             (encode : EncodeM S' T)
             (g : S -> S')
-    : CorrectEncoder format encode
-      -> CorrectEncoder (Projection_Format format g) (compose encode g).
+    : CorrectEncoder format encode ->
+      CorrectEncoder (Projection_Format format g) (compose encode g).
   Proof.
-    intros; replace
-              (compose encode g)
-              with (Compose_Encode encode (fun s => Some (g s))).
-    eapply CorrectEncoder_Compose; intros;
-      try (destruct (DecideableEnsembles.dec s') eqn: ?; first [discriminate | injections]);
-      intuition eauto.
-    apply functional_extensionality; intros; reflexivity.
+    intros.
+    eapply CorrectEncoder_equiv_encode
+      with (Compose_Encode encode (fun s => Some (g s))). reflexivity.
+    eapply CorrectEncoder_Compose; intros; eauto; try split; intros;
+      rewrite @unfold_computes in *; discriminate || injections; auto.
   Qed.
 
 End ComposeSpecializations.
