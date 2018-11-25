@@ -203,3 +203,4 @@ End ComposeSpecializations.
 
 Notation "format ◦ f" := (Projection_Format format f) (at level 55) : format_scope.
 Notation "P ∩ format" := (Restrict_Format P format) (at level 55) : format_scope.
+Notation "format2 <$> format1" := (Compose_Format format1 format2) (at level 55) : format_scope.

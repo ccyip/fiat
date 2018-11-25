@@ -85,3 +85,5 @@ Section UnionFormat.
   Qed.
 
 End UnionFormat.
+
+Notation "format1 ∪ format2" := (Union_Format format1 format2) (at level 55) : format_scope.
