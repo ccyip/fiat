@@ -117,4 +117,30 @@ Section Specifications.
     - eapply H2; eauto. congruence.
   Qed.
 
+  Add Parametric Morphism
+      (encode : EncodeM)
+    : (fun format =>
+         CorrectEncoder format encode)
+      with signature (EquivFormat ==> impl)
+        as CorrectEncoder_equiv_format.
+  Proof.
+    unfold EquivFormat, impl, CorrectEncoder;
+      intuition eauto; intros.
+    - eapply H; eauto.
+    - eapply H2; eauto. apply H. eauto.
+  Qed.
+
+  Lemma CorrectEncoder_equiv_encode
+    : forall (format : FormatM)
+        (encode encode' : EncodeM),
+      (forall s, encode s = encode' s) ->
+      CorrectEncoder format encode ->
+      CorrectEncoder format encode'.
+  Proof.
+    unfold CorrectEncoder; intros; split_and; split; intros.
+    - eapply H1; eauto. congruence.
+    - apply H2. congruence.
+  Qed.
+
 End Specifications.
+
