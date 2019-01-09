@@ -149,6 +149,34 @@ Section Specifications.
 
 End Specifications.
 
+Definition CorrectDecoder_partial
+           {S T A}
+           (format : FormatM S T)
+           (decode : DecodeM A T)
+           (R : FormatM S A) :=
+  (forall s t,
+      format s ∋ t ->
+      exists a, decode t = Some a /\ R s ∋ a) /\
+  (forall a t,
+      decode t = Some a ->
+      exists s, format s ∋ t /\ R s ∋ a).
+
+Definition IdentityFormat {S} : FormatM S S := eq.
+
+Lemma CorrectDecoder_partial_lift {S T}
+      (format : FormatM S T) (decode : DecodeM S T)
+  : CorrectDecoder_partial format decode IdentityFormat <->
+    CorrectDecoder_simpl format decode.
+Proof.
+  split; intros H; destruct H as [H1 H2]; split; intros; unfold IdentityFormat in *.
+  - destruct (H1 _ _ H) as [? [? ?]].
+    rewrite unfold_computes in H3. subst. auto.
+  - destruct (H2 _ _ H) as [? [? ?]].
+    rewrite unfold_computes in H3. subst. auto.
+  - eexists; split; eauto. congruence.
+  - eexists; split; eauto. congruence.
+Qed.
+
 (* Option monad. *)
 Definition BindOpt {A B}
            (a_opt : option A)
