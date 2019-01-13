@@ -5,51 +5,49 @@ Require Import
 
 Require Import
         Fiat.Computation
-        Fiat.Narcissus.Common.Specs.
+        Fiat.Narcissus.Common.SpecsSimpl.
 
 Section StrictTerminalFormat.
 
   Context {S : Type}. (* Source type *)
   Context {T : Type}. (* Target type *)
-  Context {cache : Cache}. (* State type *)
   Context {monoid : Monoid T}. (* Target type is a monoid *)
 
   Definition StrictTerminal_Format
     : FormatM S T :=
-    fun a env =>
+   (fun a =>
       t <- {t | bin_measure t = 0};
-      ret (t, env).
+      ret t)%comp.
 
   Definition StrictTerminal_Decode
              (s : S)
     : DecodeM S T :=
-    fun t env =>
+    fun t =>
       If (beq_nat (bin_measure t) 0)
-         Then Some (s, env)
+         Then Some s
          Else None.
 
   Definition StrictTerminal_Encode
     : EncodeM S T :=
-    fun a env => Some (mempty, env).
+    fun a => Some mempty.
 
   Lemma CorrectDecoder_StrictTerminal
         (s : S)
-        (Singleton_Format : forall s' env tenv',
-            StrictTerminal_Format s env ∋ tenv' ->
+        (Singleton_Format : forall s' t,
+            StrictTerminal_Format s ∋ t ->
             s = s')
     : CorrectDecoder_simpl StrictTerminal_Format (StrictTerminal_Decode s).
   Proof.
     unfold CorrectDecoder_simpl, StrictTerminal_Decode, StrictTerminal_Format in *; split; intros.
     { computes_to_inv; injections; subst.
-      rewrite H0; simpl.
-      eexists; intuition eauto.
-      erewrite Singleton_Format with (env := xenv); eauto.
+      rewrite H; simpl.
+      erewrite Singleton_Format; eauto.
     }
-    { destruct (beq_nat (bin_measure bin) 0) eqn: ?; simpl in *;
+    { destruct (beq_nat (bin_measure t) 0) eqn: ?; simpl in *;
         try discriminate.
       apply_in_hyp beq_nat_true.
       injections.
-      eexists env; intuition eauto.
+      intuition eauto.
     }
   Qed.
 
