@@ -3,7 +3,8 @@ Require Export
         Fiat.Common
         Fiat.Computation.Core
         Fiat.Computation.Notations
-        Fiat.Narcissus.Common.Notations.
+        Fiat.Narcissus.Common.Notations
+        Fiat.Narcissus.Common.Monoid.
 
 Set Implicit Arguments.
 

@@ -5,42 +5,41 @@ Require Import
 
 Require Import
         Fiat.Computation
-        Fiat.Narcissus.Common.Specs.
+        Fiat.Narcissus.Common.SpecsSimpl.
 
 Section LaxTerminalFormat.
 
   Context {S : Type}. (* Source type *)
   Context {T : Type}. (* Target type *)
-  Context {cache : Cache}. (* State type *)
   Context {monoid : Monoid T}. (* Target type is a monoid *)
 
   Definition LaxTerminal_Format
     : FormatM (S * T) T :=
-    fun st env => ret (snd st, env).
+    fun st => ret (snd st).
 
   Definition LaxTerminal_Decode
              (s : S)
     : DecodeM (S * T) T :=
-    fun t env => Some (s, t, env).
+    fun t => Some (s, t).
 
   Definition LaxTerminal_Encode
     : EncodeM (S * T) T :=
-    fun st env => Some (snd st, env).
+    fun st => Some (snd st).
 
   Lemma CorrectDecoder_LaxTerminal
         (s : S)
-        (Singleton_Format : forall s' env tenv',
-            LaxTerminal_Format s' env ∋ tenv' ->
-            s = fst s')
+        (Singleton_Format : forall st t,
+            LaxTerminal_Format st ∋ t ->
+            s = fst st)
     : CorrectDecoder_simpl LaxTerminal_Format (LaxTerminal_Decode s).
   Proof.
     unfold CorrectDecoder_simpl, LaxTerminal_Decode, LaxTerminal_Format in *; split; intros.
     { computes_to_inv; injections; subst.
-      destruct data; eexists; simpl; intuition eauto.
-      erewrite Singleton_Format with (s' := (s0, t)) (env := xenv); eauto.
+      destruct s0. simpl; intuition eauto.
+      erewrite Singleton_Format with (st := (s0, t)); eauto.
     }
     { injections.
-      eexists env; intuition eauto.
+      intuition eauto.
     }
   Qed.
 
