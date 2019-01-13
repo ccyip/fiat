@@ -5,7 +5,7 @@ Require Import
 
 Require Import
         Fiat.Computation
-        Fiat.Narcissus.Common.Specs
+        Fiat.Narcissus.Common.SpecsSimpl
         Fiat.Narcissus.Formats.Base.FMapFormat.
 
 Require Import Fiat.Computation.FixComp.
@@ -15,32 +15,31 @@ Section FixFormat.
 
   Context {S : Type}. (* Source Type *)
   Context {T : Type}. (* Target Type *)
-  Context {cache : Cache}. (* State Type *)
 
   Definition Fix_Format
              (format_body : FormatM S T -> FormatM S T)
-    := LeastFixedPoint (fDom := [S; CacheFormat]%type)
-                       (fCod := T * CacheFormat) format_body.
+    := LeastFixedPoint (fDom := [S]%type)
+                       (fCod := T) format_body.
 
-  Fixpoint FueledFix' {A B C}
-           (f : (B -> C -> option A) -> B -> C -> option A)
+  Fixpoint FueledFix' {A B}
+           (f : (B -> option A) -> B -> option A)
            (n : nat)
-    : B -> C -> option A :=
+    : B -> option A :=
     match n with
     | Datatypes.S n' => f (FueledFix' f n')
-    | _ => fun _ _ => None
+    | _ => fun _ => None
     end.
 
 
-  Theorem FueledFix_continuous {A B C} (F : (B -> C -> option A) -> B -> C -> option A)
-    : (forall n a b c,
-          FueledFix' F n b c = Some a ->
-          FueledFix' F (Datatypes.S n) b c = Some a) ->
+  Theorem FueledFix_continuous {A B} (F : (B -> option A) -> B -> option A)
+    : (forall n a b,
+          FueledFix' F n b = Some a ->
+          FueledFix' F (Datatypes.S n) b = Some a) ->
       forall n n',
         n <= n' ->
-        forall a b c,
-          FueledFix' F n b c = Some a ->
-          FueledFix' F n' b c = Some a.
+        forall a b,
+          FueledFix' F n b = Some a ->
+          FueledFix' F n' b = Some a.
   Proof.
     intros; induction H0; eauto.
   Qed.
@@ -49,21 +48,20 @@ Section FixFormat.
              {monoid : Monoid T}
              (decode_body : DecodeM S T -> DecodeM S T)
     : DecodeM S T :=
-    fun t env => FueledFix' decode_body (Datatypes.S (bin_measure t)) t env.
+    fun t => FueledFix' decode_body (Datatypes.S (bin_measure t)) t.
 
   Definition Compose_Target
              (P : T -> Prop)
              (format : FormatM S T)
     : FormatM S T :=
-    fun s env tenv' =>
-      format s env ∋ tenv'
-       /\ P (fst tenv').
+    fun s t =>
+      format s ∋ t /\ P t.
 
   Lemma CorrectDecoder_Fix'
         (decode_body : DecodeM S T -> DecodeM S T)
         (format_body : FormatM S T -> FormatM S T)
-        (format_body_OK : Frame.monotonic_function (format_body : funType [S; CacheFormat] (T * CacheFormat) ->
-                                                                  funType [S; CacheFormat] (T * CacheFormat)))
+        (format_body_OK : Frame.monotonic_function (format_body : funType [S] T ->
+                                                                  funType [S] T))
         (bound : T -> nat)
         (decode_body_correct :
            forall n,
@@ -81,29 +79,28 @@ Section FixFormat.
   Proof.
     induction n; simpl; intros.
     - split; unfold Compose_Target; intros.
-      + rewrite @unfold_computes in H0; omega.
+      + rewrite @unfold_computes in H; omega.
       + discriminate.
     - split; unfold Compose_Target in *; intros.
-      + rewrite @unfold_computes in H0; split_and.
+      + rewrite @unfold_computes in H; split_and.
         apply_in_hyp (unroll_LeastFixedPoint format_body_OK).
         eapply decode_body_correct; eauto.
         apply unfold_computes; intuition eauto.
-      + eapply decode_body_correct in H0; eauto.
+      + eapply decode_body_correct in H; eauto.
+        rewrite @unfold_computes in H.
         destruct_ex; split_and.
-        eexists; intuition eauto.
         apply unfold_computes.
-        rewrite @unfold_computes in H1.
-        intuition.
+        intuition eauto.
         eapply (unroll_LeastFixedPoint' format_body_OK).
-        apply unfold_computes; eauto.
+        intuition.
   Qed.
 
   Lemma CorrectDecoder_Fix
         {monoid : Monoid T}
         (decode_body : DecodeM S T -> DecodeM S T)
         (format_body : FormatM S T -> FormatM S T)
-        (format_body_OK : Frame.monotonic_function (format_body : funType [S; CacheFormat] (T * CacheFormat) ->
-                                                                  funType [S; CacheFormat] (T * CacheFormat)))
+        (format_body_OK : Frame.monotonic_function (format_body : funType [S] T ->
+                                                                  funType [S] T))
         (decode_body_correct :
            forall n,
              (CorrectDecoder_simpl
@@ -116,43 +113,40 @@ Section FixFormat.
                (decode_body (FueledFix' decode_body n)))
         (decode_body_continuous :
            forall decode,
-             (forall t env s env',
-                 decode t env = Some (s, env') ->
-                 decode_body decode t env = Some (s, env')) ->
-             forall t env s env',
-               decode_body decode t env = Some (s, env') ->
-               decode_body (decode_body decode) t env = Some (s, env'))
+             (forall t s,
+                 decode t = Some s ->
+                 decode_body decode t = Some s) ->
+             forall t s,
+               decode_body decode t = Some s ->
+               decode_body (decode_body decode) t = Some s)
     : CorrectDecoder_simpl
         (Fix_Format format_body)
         (Fix_Decode decode_body).
   Proof.
     split; intros.
     - destruct (CorrectDecoder_Fix'
-                  decode_body format_body format_body_OK bin_measure
-                  decode_body_correct (Datatypes.S (bin_measure bin))) as [? _]; eauto.
-      eapply H1 in H;
-        try solve [unfold Compose_Target; apply unfold_computes; split; eauto].
-      destruct_ex; split_and;  eexists; intuition eauto.
+                  decode_body format_body_OK bin_measure
+                  decode_body_correct (Datatypes.S (bin_measure t))) as [? _]; eauto.
+      apply H0.
+      unfold Compose_Target; apply unfold_computes; split; eauto.
     - destruct (CorrectDecoder_Fix'
-                  decode_body format_body format_body_OK bin_measure
-                  decode_body_correct (Datatypes.S (bin_measure bin))) as [_ ?]; eauto.
-      eapply H1 in H;
-        try solve [simpl; unfold Fix_Decode in H0; eauto].
-      destruct_ex; split_and;  eexists; intuition eauto.
-      unfold Compose_Target in H2; rewrite @unfold_computes in H2; intuition.
+                  decode_body format_body_OK bin_measure
+                  decode_body_correct (Datatypes.S (bin_measure t))) as [_ ?]; eauto.
+      apply H0.
+      intuition eauto.
   Qed.
 
   Definition Fix_Encode
              (measure : S -> nat)
              (encode_body : EncodeM S T -> EncodeM S T)
     : EncodeM S T :=
-    fun s env => FueledFix' encode_body (Datatypes.S (measure s)) s env.
+    fun s => FueledFix' encode_body (Datatypes.S (measure s)) s.
 
     Lemma CorrectEncoder_Fix'
         (encode_body : EncodeM S T -> EncodeM S T)
         (format_body : FormatM S T -> FormatM S T)
-        (format_body_OK : Frame.monotonic_function (format_body : funType [S; CacheFormat] (T * CacheFormat) ->
-                                                                  funType [S; CacheFormat] (T * CacheFormat)))
+        (format_body_OK : Frame.monotonic_function (format_body : funType [S] T ->
+                                                                  funType [S] T))
         (measure : S -> nat)
         (encode_body_correct :
            forall n encode,
@@ -171,8 +165,7 @@ Section FixFormat.
     induction n; simpl; intros.
     - split; unfold Restrict_Format, Compose_Format; intros.
       + discriminate.
-      + intro H'; rewrite @unfold_computes in H';
-          destruct_ex; omega.
+      + intro H'; rewrite @unfold_computes in H'. destruct_ex. rewrite !unfold_computes in H0. omega.
     - split; unfold Restrict_Format, Compose_Format in *; intros.
       + apply unfold_computes; intuition eauto.
         eapply encode_body_correct in H; eauto.
@@ -189,8 +182,8 @@ Section FixFormat.
     Lemma CorrectEncoder_Fix
           (encode_body : EncodeM S T -> EncodeM S T)
         (format_body : FormatM S T -> FormatM S T)
-        (format_body_OK : Frame.monotonic_function (format_body : funType [S; CacheFormat] (T * CacheFormat) ->
-                                                                  funType [S; CacheFormat] (T * CacheFormat)))
+        (format_body_OK : Frame.monotonic_function (format_body : funType [S] T ->
+                                                                  funType [S] T))
         (measure : S -> nat)
         (encode_body_correct :
            forall n encode,
@@ -218,21 +211,21 @@ Section FixFormat.
   Proof.
     split; intros.
     - destruct (CorrectEncoder_Fix'
-                  encode_body format_body format_body_OK measure
-                  encode_body_correct (Datatypes.S (measure a))) as [? _]; eauto.
-      eapply H0 in H;
-        try solve [unfold Compose_Target; apply unfold_computes; split; eauto].
+                  encode_body format_body_OK measure
+                  encode_body_correct (Datatypes.S (measure s))) as [? _]; eauto.
+      eapply H0 in H. clear H0.
       unfold Restrict_Format, Compose_Format in H.
       rewrite  @unfold_computes in H.
       destruct_ex; split_and; subst; eauto.
+      rewrite  @unfold_computes in H1.
+      split_and. subst. auto.
     - destruct (CorrectEncoder_Fix'
-                  encode_body format_body format_body_OK measure
-                  encode_body_correct (Datatypes.S (measure a))) as [_ ?]; eauto.
-      eapply H0 in H;
-        try solve [simpl; unfold Fix_Encode in H0; eauto].
+                  encode_body format_body_OK measure
+                  encode_body_correct (Datatypes.S (measure s))) as [_ ?]; eauto.
+      eapply H0 in H. clear H0.
       intro; eapply H.
       unfold Restrict_Format, Compose_Format; apply unfold_computes.
-      eexists; split_and; eauto.
+      eexists. intuition eauto. apply unfold_computes. intuition eauto.
   Qed.
 
 End FixFormat.
