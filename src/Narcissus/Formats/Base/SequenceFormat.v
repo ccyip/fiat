@@ -18,12 +18,12 @@ Section SequenceFormat.
        q <- format2;
        ret (mappend p q))%comp.
 
-  Definition sequence_Format
+  Definition Sequence_Format
              {S : Type}
              (format1 format2 : FormatM S T)
     : FormatM S T := (fun s => sequence (format1 s) (format2 s))%comp.
 
-  Definition sequence_Decode
+  Definition Sequence_Decode
              {S S' : Type}
              (decode1 : DecodeM (S' * T) T)
              (decode2 : S' -> DecodeM S T)
@@ -34,7 +34,7 @@ Section SequenceFormat.
           | None => None
           end).
 
-  Definition sequence_Encode
+  Definition Sequence_Encode
              {S : Type}
              (encode1 encode2 : EncodeM S T)
     := (fun s =>
@@ -42,18 +42,18 @@ Section SequenceFormat.
           t2 <- encode2 s;
           Some (mappend t1 t2)).
 
-  Notation "x ++ y" := (sequence_Format x y) : format_scope .
+  Notation "x ++ y" := (Sequence_Format x y) : format_scope .
 
-  Lemma CorrectEncoder_sequence
+  Lemma CorrectEncoder_Sequence
         {S : Type}
         (format1 format2 : FormatM S T)
         (encode1 encode2 : EncodeM S T)
         (encode1_correct : CorrectEncoder format1 encode1)
         (encode2_correct : CorrectEncoder format2 encode2)
     : CorrectEncoder (format1 ++ format2)
-                     (sequence_Encode encode1 encode2).
+                     (Sequence_Encode encode1 encode2).
   Proof.
-    unfold CorrectEncoder, sequence_Encode, sequence_Format, sequence,
+    unfold CorrectEncoder, Sequence_Encode, Sequence_Format, sequence,
     BindOpt in *; intuition; intros.
     - destruct (encode1 s) as [ t1 | ] eqn: ? ;
         simpl in *; try discriminate.
@@ -69,7 +69,7 @@ Section SequenceFormat.
        reflexivity.
   Qed.
 
-  Lemma CorrectDecoder_sequence
+  Lemma CorrectDecoder_Sequence
         {S S' : Type}
         (f : S -> S' -> Prop)
         (format1' : FormatM (S' * T) T)
@@ -87,10 +87,10 @@ Section SequenceFormat.
         (decode1_correct : CorrectDecoder_simpl format1' decode1)
         (decode2_correct : forall (s' : S'), CorrectDecoder_simpl (Restrict_Format (fun s => f s s') format2) (decode2 s'))
     : CorrectDecoder_simpl (format1 ++ format2)
-                           (sequence_Decode decode1 decode2).
+                           (Sequence_Decode decode1 decode2).
   Proof.
     unfold CorrectDecoder_simpl, Projection_Format,
-    sequence_Decode, sequence_Format, sequence, Compose_Format; split; intros.
+    Sequence_Decode, Sequence_Format, sequence, Compose_Format; split; intros.
     - computes_to_inv; subst.
       eapply format1_overlap in H; destruct_ex; split_and.
       simpl in *; injections.
@@ -108,7 +108,7 @@ Section SequenceFormat.
       generalize Heqo; intro Heqo'.
       eapply decode1_correct in Heqo; eauto.
       eapply decode2_correct in H; eauto.
-      unfold Restrict_Format, Compose_Format, LaxTerminal_Format, sequence_Format,
+      unfold Restrict_Format, Compose_Format, LaxTerminal_Format, Sequence_Format,
       Bind2 in H.
       rewrite unfold_computes in H. destruct_ex; split_and.
       rewrite unfold_computes in H1. split_and. subst.
@@ -117,7 +117,7 @@ Section SequenceFormat.
       rewrite H2. eauto.
   Qed.
 
-  Corollary CorrectDecoder_sequence_Projection
+  Corollary CorrectDecoder_Sequence_Projection
         {S S' : Type}
         (f : S -> S')
         (format1 : FormatM S' T)
@@ -127,11 +127,11 @@ Section SequenceFormat.
         (decode1_correct : CorrectDecoder_simpl (Projection_Format format1 fst ++ ?* ) decode1)
         (decode2_correct : forall (s' : S'), CorrectDecoder_simpl (Restrict_Format (fun s => f s = s') format2) (decode2 s'))
     : CorrectDecoder_simpl (Projection_Format format1 f ++ format2)
-                           (sequence_Decode decode1 decode2).
+                           (Sequence_Decode decode1 decode2).
   Proof.
     unfold Projection_Format.
-    eapply (CorrectDecoder_sequence (fun s s' => f s = s')); eauto; intros;
-      unfold Projection_Format, Compose_Format, sequence_Format, sequence, Bind2, LaxTerminal_Format in *.
+    eapply (CorrectDecoder_Sequence (fun s s' => f s = s')); eauto; intros;
+      unfold Projection_Format, Compose_Format, Sequence_Format, sequence, Bind2, LaxTerminal_Format in *.
     - rewrite @unfold_computes in H.
       destruct_ex; split_and; subst.
       eexists; intros; intuition.
@@ -208,4 +208,4 @@ Section SequenceFormat.
 
 End SequenceFormat.
 
-Notation "x ++ y" := (sequence_Format x y) : format_scope .
+Notation "x ++ y" := (Sequence_Format x y) : format_scope .
