@@ -8,6 +8,7 @@ Require Import
 
 Section SequenceFormat.
 
+  Context {S : Type}. (* Source Type *)
   Context {T : Type}. (* Target Type *)
   Context {monoid : Monoid T}. (* Target type is a monoid. *)
 
@@ -19,12 +20,11 @@ Section SequenceFormat.
        ret (mappend p q))%comp.
 
   Definition Sequence_Format
-             {S : Type}
              (format1 format2 : FormatM S T)
     : FormatM S T := (fun s => sequence (format1 s) (format2 s))%comp.
 
   Definition Sequence_Decode
-             {S S' : Type}
+             {S' : Type}
              (decode1 : DecodeM (S' * T) T)
              (decode2 : S' -> DecodeM S T)
     : DecodeM S T
@@ -35,7 +35,6 @@ Section SequenceFormat.
           end).
 
   Definition Sequence_Encode
-             {S : Type}
              (encode1 encode2 : EncodeM S T)
     := (fun s =>
           t1 <- encode1 s;
@@ -45,7 +44,6 @@ Section SequenceFormat.
   Notation "x ++ y" := (Sequence_Format x y) : format_scope .
 
   Lemma CorrectEncoder_Sequence
-        {S : Type}
         (format1 format2 : FormatM S T)
         (encode1 encode2 : EncodeM S T)
         (encode1_correct : CorrectEncoder format1 encode1)
@@ -70,7 +68,7 @@ Section SequenceFormat.
   Qed.
 
   Lemma CorrectDecoder_Sequence
-        {S S' : Type}
+        {S' : Type}
         (f : S -> S' -> Prop)
         (format1' : FormatM (S' * T) T)
         (format1 format2 : FormatM S T)
@@ -117,31 +115,31 @@ Section SequenceFormat.
       rewrite H2. eauto.
   Qed.
 
-  Corollary CorrectDecoder_Sequence_Projection
-        {S S' : Type}
-        (f : S -> S')
-        (format1 : FormatM S' T)
-        (format2 : FormatM S T)
-        (decode1 : DecodeM (S' * T) T)
-        (decode2 : S' -> DecodeM S T)
-        (decode1_correct : CorrectDecoder_simpl (Projection_Format format1 fst ++ ?* ) decode1)
-        (decode2_correct : forall (s' : S'), CorrectDecoder_simpl (Restrict_Format (fun s => f s = s') format2) (decode2 s'))
-    : CorrectDecoder_simpl (Projection_Format format1 f ++ format2)
-                           (Sequence_Decode decode1 decode2).
-  Proof.
-    unfold Projection_Format.
-    eapply (CorrectDecoder_Sequence (fun s s' => f s = s')); eauto; intros;
-      unfold Projection_Format, Compose_Format, Sequence_Format, sequence, Bind2, LaxTerminal_Format in *.
-    - rewrite @unfold_computes in H.
-      destruct_ex; split_and; subst.
-      eexists; intros; intuition.
-      simpl; computes_to_econstructor.
-      rewrite unfold_computes; eauto.
-      simpl; computes_to_econstructor; eauto.
-    - computes_to_inv; subst.
-      apply_in_hyp @unfold_computes; destruct_ex; split_and; subst.
-      eexists; simpl; intuition eauto.
-  Qed.
+  (* Corollary CorrectDecoder_Sequence_Projection *)
+  (*       {S' : Type} *)
+  (*       (f : S -> S') *)
+  (*       (format1 : FormatM S' T) *)
+  (*       (format2 : FormatM S T) *)
+  (*       (decode1 : DecodeM (S' * T) T) *)
+  (*       (decode2 : S' -> DecodeM S T) *)
+  (*       (decode1_correct : CorrectDecoder_simpl (Projection_Format format1 fst ++ ?* ) decode1) *)
+  (*       (decode2_correct : forall (s' : S'), CorrectDecoder_simpl (Restrict_Format (fun s => f s = s') format2) (decode2 s')) *)
+  (*   : CorrectDecoder_simpl (Projection_Format format1 f ++ format2) *)
+  (*                          (Sequence_Decode decode1 decode2). *)
+  (* Proof. *)
+  (*   unfold Projection_Format. *)
+  (*   eapply (CorrectDecoder_Sequence (fun s s' => f s = s')); eauto; intros; *)
+  (*     unfold Projection_Format, Compose_Format, Sequence_Format, sequence, Bind2, LaxTerminal_Format in *. *)
+  (*   - rewrite @unfold_computes in H. *)
+  (*     destruct_ex; split_and; subst. *)
+  (*     eexists; intros; intuition. *)
+  (*     simpl; computes_to_econstructor. *)
+  (*     rewrite unfold_computes; eauto. *)
+  (*     simpl; computes_to_econstructor; eauto. *)
+  (*   - computes_to_inv; subst. *)
+  (*     apply_in_hyp @unfold_computes; destruct_ex; split_and; subst. *)
+  (*     eexists; simpl; intuition eauto. *)
+  (* Qed. *)
 
   (*Corollary CorrectDecoder_sequence_Done
             {S : Type}
