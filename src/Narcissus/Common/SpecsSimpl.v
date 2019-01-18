@@ -57,13 +57,10 @@ Section Specifications.
   Definition EquivFormat (format1 format2 : FormatM) :=
     forall s, refineEquiv (format1 s) (format2 s).
 
-  Lemma EquivFormat_sym
-    : forall (format1 format2 : FormatM),
-      EquivFormat format1 format2 ->
-      EquivFormat format2 format1.
+  Global Instance EquivFormat_Equivalence : Equivalence EquivFormat.
   Proof.
-    unfold EquivFormat, refineEquiv; intuition eauto;
-      eapply H.
+    apply Equivalence.pointwise_equivalence.
+    auto with typeclass_instances.
   Qed.
 
   Definition DisjointFormat (format1 format2 : FormatM) :=
