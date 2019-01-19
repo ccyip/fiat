@@ -23,6 +23,15 @@ Section SequenceFormat.
              (format1 format2 : FormatM S T)
     : FormatM S T := (fun s => sequence (format1 s) (format2 s))%comp.
 
+  Global Add Parametric Morphism
+    : Sequence_Format
+      with signature ((@EquivFormat S T) ==> (@EquivFormat S T) ==> (@EquivFormat S T))
+        as Sequence_Format_Equiv_congr.
+  Proof.
+    intros. unfold Sequence_Format, sequence.
+    intro. setoid_rewrite H. setoid_rewrite H0. reflexivity.
+  Qed.
+
   Definition Sequence_Decode
              {S' : Type}
              (decode1 : DecodeM (S' * T) T)
