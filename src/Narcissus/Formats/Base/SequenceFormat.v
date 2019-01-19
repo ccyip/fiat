@@ -23,6 +23,23 @@ Section SequenceFormat.
              (format1 format2 : FormatM S T)
     : FormatM S T := (fun s => sequence (format1 s) (format2 s))%comp.
 
+  (* Equivalent definition. *)
+  Definition Sequence_Format'
+             (format1 format2 : FormatM S T)
+    : FormatM S T :=
+    fun s t =>
+      exists t1 t2, format1 s ∋ t1 /\ format2 s ∋ t2 /\ t = mappend t1 t2.
+
+  Lemma Sequence_Format_equiv format1 format2
+    : EquivFormat (Sequence_Format format1 format2) (Sequence_Format' format1 format2).
+  Proof.
+    unfold Sequence_Format, Sequence_Format', sequence.
+    split; intros ? ?.
+    - rewrite unfold_computes in H. destruct_ex. split_and.
+      subst. computes_to_econstructor; intuition eauto.
+    - computes_to_inv. rewrite unfold_computes. eauto.
+  Qed.
+
   Global Add Parametric Morphism
     : Sequence_Format
       with signature ((@EquivFormat S T) ==> (@EquivFormat S T) ==> (@EquivFormat S T))
