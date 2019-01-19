@@ -28,6 +28,25 @@ Section ComposeFormat.
     : FormatM S T :=
     (fun s => s' <- format2 s; format1 s')%comp.
 
+  Lemma Compose_Format_equiv format1 format2
+    : EquivFormat (Compose_Format format1 format2) (Compose_Format' format1 format2).
+  Proof.
+    unfold Compose_Format, Compose_Format'.
+    split; intros ? ?.
+    - computes_to_inv. rewrite unfold_computes. eauto.
+    - rewrite unfold_computes in H. destruct_ex.
+      computes_to_econstructor; intuition eauto.
+  Qed.
+
+  Global Add Parametric Morphism
+    : Compose_Format
+      with signature ((@EquivFormat S' T) ==> (@EquivFormat S S') ==> (@EquivFormat S T))
+        as Compose_Format_Equiv_congr.
+  Proof.
+    intros. rewrite !Compose_Format_equiv. unfold Compose_Format'.
+    intro. setoid_rewrite H. setoid_rewrite H0. reflexivity.
+  Qed.
+
   Definition Compose_Decode
              (decode1 : DecodeM S' T)
              (decode2 : DecodeM S S') (* Transformation Function *)
@@ -39,16 +58,6 @@ Section ComposeFormat.
              (encode2 : EncodeM S S')
     : EncodeM S T :=
     fun s => s' <- encode2 s; encode1 s'.
-
-  Lemma Compose_Format_equiv format1 format2
-    : EquivFormat (Compose_Format format1 format2) (Compose_Format' format1 format2).
-  Proof.
-    unfold Compose_Format, Compose_Format'.
-    split; intros ? ?.
-    - computes_to_inv. rewrite unfold_computes. eauto.
-    - rewrite unfold_computes in H. destruct_ex.
-      computes_to_econstructor; intuition eauto.
-  Qed.
 
   Lemma CorrectDecoder_Compose
         (format1 : FormatM S' T)
@@ -116,7 +125,7 @@ Section ComposeSpecializations.
     : FormatM S T
     := Compose_Format format (fun s s' => s = s' /\ P s').
 
-  Lemma Restrict_Format_simpl P format
+  Lemma Restrict_Format_equiv P format
     : EquivFormat (Restrict_Format P format)
                   (fun s t => format s ∋ t /\ P s).
   Proof.
@@ -125,6 +134,16 @@ Section ComposeSpecializations.
     - intuition. eexists. intuition eauto.
       rewrite unfold_computes. intuition eauto.
     - destruct_ex. intuition; rewrite @unfold_computes in *; intuition congruence.
+  Qed.
+
+  Global Add Parametric Morphism
+    : Restrict_Format
+      with signature ((pointwise_relation _ iff) ==> (@EquivFormat S T) ==> (@EquivFormat S T))
+        as Restrict_Format_Equiv_congr.
+  Proof.
+    intros. unfold Restrict_Format.
+    f_equiv; eauto.
+    intro. split; intro; rewrite !unfold_computes; rewrite H; intuition eauto.
   Qed.
 
   Corollary CorrectEncoder_Restrict_Format
@@ -172,7 +191,7 @@ Section ComposeSpecializations.
     : FormatM S T :=
     Compose_Format format (fun s s' => f s = s').
 
-  Lemma EquivFormat_Projection_Format
+  Lemma Projection_Format_equiv
         (format : FormatM S' T)
         (f : S -> S')
     : EquivFormat (Projection_Format format f)
@@ -183,6 +202,17 @@ Section ComposeSpecializations.
     eexists. intuition eauto. apply unfold_computes. reflexivity.
     rewrite unfold_computes in H; destruct_ex; intuition.
     rewrite unfold_computes in H1. subst; eauto.
+  Qed.
+
+  Global Add Parametric Morphism
+    : Projection_Format
+      with signature ((@EquivFormat S' T) ==> (pointwise_relation _ eq) ==> (@EquivFormat S T))
+        as Projection_Format_Equiv_congr.
+  Proof.
+    intros.
+    unfold Projection_Format.
+    f_equiv; eauto.
+    intro. rewrite H0. reflexivity.
   Qed.
 
   Corollary CorrectEncoder_Projection_Format
