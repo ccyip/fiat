@@ -14,6 +14,17 @@ Section UnionFormat.
     fun s t =>
       format1 s ∋ t \/ format2 s ∋ t.
 
+  Global Add Parametric Morphism
+    : Union_Format
+      with signature ((@EquivFormat S T) ==> (@EquivFormat S T) ==> (@EquivFormat S T))
+        as Union_Format_Equiv_congr.
+  Proof.
+    intros. unfold Union_Format. intro.
+    split; intro;
+      rewrite unfold_computes; intros; rewrite unfold_computes; intuition eauto;
+        solve [left; apply H; eauto | right; apply H0; eauto].
+  Qed.
+
   Definition Union_Decode
              (decode1 decode2 : DecodeM S T)
              (choose : T -> bool)
