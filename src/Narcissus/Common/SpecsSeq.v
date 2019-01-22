@@ -9,7 +9,7 @@ Section Specification_Sequence.
   Variable T : Type.
 
   Inductive SpecsSeg (bf bt : bool) : Type :=
-  | SSeg_intro: FormatM S T -> bool -> SpecsSeg bf bt
+  | SSeg_intro: SpecsDSL S T -> bool -> SpecsSeg bf bt
   .
 
   Inductive SpecsSeq (bf bt : bool) : Type :=
@@ -24,7 +24,7 @@ Section Specification_Sequence.
     end.
 
   Definition SpecsSeq_lift {n}
-    : Vector.t (FormatM S T) (Datatypes.S n) -> SpecsSeq false false :=
+    : Vector.t (SpecsDSL S T) (Datatypes.S n) -> SpecsSeq false false :=
     Vector.rectS (fun _ _ => SpecsSeq false false)
                  (fun fmt => SSeq_one (SSeg_intro false false fmt false))
                  (fun fmt _ _ seq => SSeq_cons (SSeg_intro false false fmt false) seq).
