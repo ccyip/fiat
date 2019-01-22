@@ -78,3 +78,29 @@ Proof.
         repeat econstructor; eauto.
     f_equal; auto.
 Qed.
+
+Inductive SpecsDSL_Atomic {S T} : SpecsDSL S T -> Prop :=
+| SA_Arbitrary: forall fmt, SpecsDSL_Atomic (SL_Arbitrary fmt)
+| SA_Compose: forall S' (dsl1 : SpecsDSL S' T) (dsl2 : SpecsDSL S S'),
+    SpecsDSL_Atomic (SL_Compose dsl1 dsl2)
+| SA_Projection: forall S' (dsl : SpecsDSL S' T) (f : S -> S'),
+    SpecsDSL_Atomic (SL_Projection dsl f)
+| SA_Restrict: forall dsl P, SpecsDSL_Atomic (SL_Restrict dsl P)
+| SA_Union: forall dsl1 dsl2, SpecsDSL_Atomic (SL_Union dsl1 dsl2)
+.
+
+Definition SpecsDSL_atomic {S T} (dsl : SpecsDSL S T)
+  : {SpecsDSL_Atomic dsl} + {~ SpecsDSL_Atomic dsl}.
+Proof.
+  refine (match dsl with
+          | SL_Sequence _ dsl1 dsl2 => right _
+          | _ => left _
+          end); abstract (constructor || inversion 1).
+Defined.
+
+Lemma SpecsDSL_Atomic_not_iff {S T} (dsl : SpecsDSL S T)
+  : ~ SpecsDSL_Atomic dsl <-> exists `(Monoid T) dsl1 dsl2, dsl = SL_Sequence dsl1 dsl2.
+Proof.
+  destruct dsl; split; intros; destruct_ex; try easy; eauto.
+  all : exfalso; apply H; constructor.
+Qed.
