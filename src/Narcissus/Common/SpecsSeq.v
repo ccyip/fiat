@@ -23,17 +23,17 @@ Section Specification_Sequence.
     | SSeq_cons _ _ seq' => Datatypes.S (SpecsSeq_len seq')
     end.
 
-  Definition SpecsSeq_lift {n}
-    : Vector.t (SpecsDSL S T) (Datatypes.S n) -> SpecsSeq false false :=
-    Vector.rectS (fun _ _ => SpecsSeq false false)
-                 (fun fmt => SSeq_one (SSeg_intro false false fmt false))
-                 (fun fmt _ _ seq => SSeq_cons (SSeg_intro false false fmt false) seq).
+  (* Definition SpecsSeq_lift {n} *)
+  (*   : Vector.t (SpecsDSL S T) (Datatypes.S n) -> SpecsSeq false false := *)
+  (*   Vector.rectS (fun _ _ => SpecsSeq false false) *)
+  (*                (fun fmt => SSeq_one (SSeg_intro false false fmt false)) *)
+  (*                (fun fmt _ _ seq => SSeq_cons (SSeg_intro false false fmt false) seq). *)
 
-  Fixpoint SpecsSeq_erase {bf bt} (seq : SpecsSeq bf bt)
-    : Vector.t _ (SpecsSeq_len seq) :=
-    match seq with
-    | SSeq_one (SSeg_intro fmt _) => Vector.cons _ fmt _ (Vector.nil _)
-    | SSeq_cons _ (SSeg_intro fmt _) seq' => Vector.cons _ fmt _ (SpecsSeq_erase seq')
-    end.
+  (* Fixpoint SpecsSeq_erase {bf bt} (seq : SpecsSeq bf bt) *)
+  (*   : Vector.t _ (SpecsSeq_len seq) := *)
+  (*   match seq with *)
+  (*   | SSeq_one (SSeg_intro fmt _) => Vector.cons _ fmt _ (Vector.nil _) *)
+  (*   | SSeq_cons _ (SSeg_intro fmt _) seq' => Vector.cons _ fmt _ (SpecsSeq_erase seq') *)
+  (*   end. *)
 
 End Specification_Sequence.
