@@ -3,52 +3,45 @@ Require Export
         Fiat.Narcissus.BaseFormats
         Fiat.Narcissus.Common.SpecsDSL.
 
+Import Vector.VectorNotations.
+
+(* Do we have this definition somewhere in the library? *)
+Fixpoint Vector_repeat {A} (a : A) (n : nat) : Vector.t A n :=
+  match n with
+  | 0 => []
+  | S n' => a :: Vector_repeat a n'
+  end.
+
 Section Specification_Sequence.
 
-  Variable S : Type.
+  Variable A : Type.
   Variable T : Type.
   Context {monoid : Monoid T}.
 
-  Inductive SpecsSeq (bf bt : bool) : Type :=
-  | SSeq_one: SpecsDSL S T -> bool -> SpecsSeq bf bt
-  | SSeq_cons bm: SpecsDSL S T -> bool -> SpecsSeq bm bt -> SpecsSeq bf bt
-  .
+  Inductive SpecsSeq n : Type :=
+  | SS_intro: Vector.t (SpecsDSL A T) (S n) ->
+              Vector.t bool (S n) ->
+              Vector.t bool (S (S n)) ->
+              SpecsSeq n.
 
-  Fixpoint SpecsSeq_len {bf bt : bool} (seq : SpecsSeq bf bt) : nat :=
+  Definition SpecsSeq_lift {n} (dsls : Vector.t (SpecsDSL A T) (S n))
+    : SpecsSeq n :=
+    SS_intro dsls (Vector_repeat false (S n)) (Vector_repeat false (S (S n))).
+
+  Definition SpecsSeq_erase {n} (seq : SpecsSeq n)
+    : Vector.t _ _ :=
     match seq with
-    | SSeq_one _ _ => 1
-    | SSeq_cons _ _ _ seq' => Datatypes.S (SpecsSeq_len seq')
+    | SS_intro dsls _ _ => dsls
     end.
 
-  Fixpoint SpecsSeq_append {bf bm bt : bool}
-           (seq1 : SpecsSeq bf bm) (seq2 : SpecsSeq bm bt)
-    : SpecsSeq bf bt :=
-    match seq1 with
-    | SSeq_one dsl b => SSeq_cons bf dsl b seq2
-    | SSeq_cons _ dsl b seq' => SSeq_cons bf dsl b (SpecsSeq_append seq' seq2)
-    end.
-
-  (* Definition SpecsSeq_lift {n} *)
-  (*   : Vector.t (SpecsDSL S T) (Datatypes.S n) -> SpecsSeq false false := *)
-  (*   Vector.rectS (fun _ _ => SpecsSeq false false) *)
-  (*                (fun fmt => SSeq_one false false fmt false) *)
-  (*                (fun fmt _ _ seq => SSeq_cons false fmt false seq). *)
-
-  (* Fixpoint SpecsSeq_erase {bf bt} (seq : SpecsSeq bf bt) *)
-  (*   : Vector.t _ (SpecsSeq_len seq) := *)
-  (*   match seq with *)
-  (*   | SSeq_one fmt _ => Vector.cons _ fmt _ (Vector.nil _) *)
-  (*   | SSeq_cons _ fmt _ seq' => Vector.cons _ fmt _ (SpecsSeq_erase seq') *)
-  (*   end. *)
-
-  Inductive SpecsDSL_Seq_Sim : SpecsDSL S T -> SpecsSeq false false -> Prop :=
+  Inductive SpecsDSL_Vec_Sim : SpecsDSL A T -> forall {n}, Vector.t (SpecsDSL A T) (S n) -> Prop :=
   | SSS_Atomic: forall dsl,
       SpecsDSL_Atomic dsl ->
-      SpecsDSL_Seq_Sim dsl (SSeq_one false false dsl false)
-  | SSS_Sequence: forall dsl1 seq1 dsl2 seq2,
-      SpecsDSL_Seq_Sim dsl1 seq1 ->
-      SpecsDSL_Seq_Sim dsl2 seq2 ->
-      SpecsDSL_Seq_Sim (SL_Sequence dsl1 dsl2) (SpecsSeq_append seq1 seq2)
+      SpecsDSL_Vec_Sim dsl (Vector.cons _ dsl _ (Vector.nil _))
+  | SSS_Sequence: forall dsl1 {m} (v1 : Vector.t _ (S m)) dsl2 {n} (v2 : Vector.t _ (S n)),
+      SpecsDSL_Vec_Sim dsl1 v1 ->
+      SpecsDSL_Vec_Sim dsl2 v2 ->
+      SpecsDSL_Vec_Sim (SL_Sequence dsl1 dsl2) (Vector.append v1 v2)
   .
 
 End Specification_Sequence.
