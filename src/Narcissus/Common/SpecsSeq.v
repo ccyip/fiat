@@ -3,14 +3,8 @@ Require Export
         Fiat.Narcissus.BaseFormats
         Fiat.Narcissus.Common.SpecsDSL.
 
+Require MoreVectors.Vector.
 Import Vector.VectorNotations.
-
-(* Do we have this definition somewhere in the library? *)
-Fixpoint Vector_repeat {A} (a : A) (n : nat) : Vector.t A n :=
-  match n with
-  | 0 => []
-  | S n' => a :: Vector_repeat a n'
-  end.
 
 Section Specification_Sequence.
 
@@ -26,7 +20,7 @@ Section Specification_Sequence.
 
   Definition SpecsSeq_lift {n} (dsls : Vector.t (SpecsDSL A T) (S n))
     : SpecsSeq n :=
-    SS_intro dsls (Vector_repeat false (S n)) (Vector_repeat false (S (S n))).
+    SS_intro dsls (Vector.repeat false (S n)) (Vector.repeat false (S (S n))).
 
   Definition SpecsSeq_erase {n} (seq : SpecsSeq n)
     : Vector.t _ _ :=
@@ -43,5 +37,14 @@ Section Specification_Sequence.
       SpecsDSL_Vec_Sim dsl2 v2 ->
       SpecsDSL_Vec_Sim (SL_Sequence dsl1 dsl2) (Vector.append v1 v2)
   .
+
+  Lemma SpecsDSL_vec_atomic {n}
+    : forall dsl (dsls : Vector.t (SpecsDSL A T) (S n)),
+      SpecsDSL_Vec_Sim dsl dsls -> forall d, Vector.In d dsls -> SpecsDSL_Atomic d.
+  Proof.
+    intros. induction H.
+    - inversion H0. eauto. inversion H3.
+    - destruct (Vector.in_app_or v1 v2 d H0); eauto.
+  Qed.
 
 End Specification_Sequence.
