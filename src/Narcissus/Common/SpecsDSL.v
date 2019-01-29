@@ -29,18 +29,9 @@ Inductive ASpecsDSL S T : Type :=
 | ASL_Right `{Monoid T}: SpecsDSL S T -> ASpecsDSL S T
 | ASL_Left `{Monoid T}: SpecsDSL S T -> ASpecsDSL S T.
 
-Definition ASpecsDSL_denote_source_type {S T} (adsl : ASpecsDSL S T) : Type :=
+Fixpoint ASpecsDSL_denote {S T} (adsl : ASpecsDSL S T) : FormatM (S * T) T :=
   match adsl with
-  | ASL_None _ _ => S
-  | _ => S * T
-  end.
-
-Definition ASpecsDSL_denote_type {S T} (adsl : ASpecsDSL S T) : Type :=
-  FormatM (ASpecsDSL_denote_source_type adsl) T.
-
-Fixpoint ASpecsDSL_denote {S T} (adsl : ASpecsDSL S T) : ASpecsDSL_denote_type adsl :=
-  match adsl with
-  | ASL_None _ dsl => SpecsDSL_denote dsl
+  | ASL_None _ dsl => fun st t => SpecsDSL_denote dsl (fst st) ∋ t /\ (snd st) = mempty
   | ASL_Right _ dsl => fun st t => exists t1, (SpecsDSL_denote dsl) (fst st) ∋ t1 /\ t = mappend t1 (snd st)
   | ASL_Left _ dsl => fun st t => exists t2, (SpecsDSL_denote dsl) (fst st) ∋ t2 /\ t = mappend (snd st) t2
   end.
@@ -50,9 +41,10 @@ Fixpoint ASpecsDSL_denote {S T} (adsl : ASpecsDSL S T) : ASpecsDSL_denote_type a
    pattern match IdentityFormat. We should possibly have a constructor called
    SL_Primitive and collect all the built-in formats there. *)
 Fixpoint ASpecsDSL_to_SpecsDSL {S T} (adsl : ASpecsDSL S T)
-  : SpecsDSL (ASpecsDSL_denote_source_type adsl) T :=
+  : SpecsDSL (S * T) T :=
   match adsl with
-  | ASL_None _ dsl => dsl
+  | ASL_None _ dsl => SL_Restrict (SL_Projection dsl fst)
+                                 (fun s => snd s = mempty)
   | ASL_Right _ dsl => SL_Sequence (SL_Projection dsl fst)
                                   (SL_Projection (SL_Arbitrary IdentityFormat) snd)
   | ASL_Left _ dsl => SL_Sequence (SL_Projection (SL_Arbitrary IdentityFormat) snd)
@@ -63,16 +55,14 @@ Lemma ASpecsDSL_to_SpecsDSL_denote_equiv {S T} (adsl : ASpecsDSL S T)
   : EquivFormat (SpecsDSL_denote (ASpecsDSL_to_SpecsDSL adsl))
                 (ASpecsDSL_denote adsl).
 Proof.
-  destruct adsl; simpl.
-  - reflexivity.
-  - rewrite !Projection_Format_equiv.
-    rewrite Sequence_Format_equiv. unfold Sequence_Format'. unfold IdentityFormat.
+  destruct adsl; simpl; rewrite !Projection_Format_equiv.
+  - rewrite Restrict_Format_equiv. reflexivity.
+  - rewrite Sequence_Format_equiv. unfold Sequence_Format'. unfold IdentityFormat.
     split; intros ? ?; rewrite unfold_computes in *;
       destruct_ex; split_and; subst;
         repeat econstructor; eauto.
     f_equal; auto.
-  - rewrite !Projection_Format_equiv.
-    rewrite Sequence_Format_equiv. unfold Sequence_Format'. unfold IdentityFormat.
+  - rewrite Sequence_Format_equiv. unfold Sequence_Format'. unfold IdentityFormat.
     split; intros ? ?; rewrite unfold_computes in *;
       destruct_ex; split_and; subst;
         repeat econstructor; eauto.
