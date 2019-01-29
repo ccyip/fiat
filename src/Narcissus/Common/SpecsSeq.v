@@ -12,35 +12,35 @@ Section Specification_Sequence.
   Variable T : Type.
   Context {monoid : Monoid T}.
 
-  Inductive SpecsSeq n : Type :=
-  | SS_intro: Vector.t (SpecsDSL A T) (S n) ->
+  Inductive FormatSeq n : Type :=
+  | FS_intro: Vector.t (FormatDSL A T) (S n) ->
               Vector.t bool (S n) ->
               Vector.t bool (S (S n)) ->
-              SpecsSeq n.
+              FormatSeq n.
 
-  Definition SpecsSeq_lift {n} (dsls : Vector.t (SpecsDSL A T) (S n))
-    : SpecsSeq n :=
-    SS_intro dsls (Vector.repeat false (S n)) (Vector.repeat false (S (S n))).
+  Definition FormatSeq_lift {n} (dsls : Vector.t (FormatDSL A T) (S n))
+    : FormatSeq n :=
+    FS_intro dsls (Vector.repeat false (S n)) (Vector.repeat false (S (S n))).
 
-  Definition SpecsSeq_erase {n} (seq : SpecsSeq n)
+  Definition FormatSeq_erase {n} (seq : FormatSeq n)
     : Vector.t _ _ :=
     match seq with
-    | SS_intro dsls _ _ => dsls
+    | FS_intro dsls _ _ => dsls
     end.
 
-  Inductive SpecsDSL_Vec_Sim : SpecsDSL A T -> forall {n}, Vector.t (SpecsDSL A T) (S n) -> Prop :=
-  | SSS_Atomic: forall dsl,
-      SpecsDSL_Atomic dsl ->
-      SpecsDSL_Vec_Sim dsl (Vector.cons _ dsl _ (Vector.nil _))
-  | SSS_Sequence: forall dsl1 {m} (v1 : Vector.t _ (S m)) dsl2 {n} (v2 : Vector.t _ (S n)),
-      SpecsDSL_Vec_Sim dsl1 v1 ->
-      SpecsDSL_Vec_Sim dsl2 v2 ->
-      SpecsDSL_Vec_Sim (SL_Sequence dsl1 dsl2) (Vector.append v1 v2)
+  Inductive FormatDSL_Vec_Sim : FormatDSL A T -> forall {n}, Vector.t (FormatDSL A T) (S n) -> Prop :=
+  | FVS_Atomic: forall dsl,
+      FormatDSL_Atomic dsl ->
+      FormatDSL_Vec_Sim dsl (Vector.cons _ dsl _ (Vector.nil _))
+  | FVS_Sequence: forall dsl1 {m} (v1 : Vector.t _ (S m)) dsl2 {n} (v2 : Vector.t _ (S n)),
+      FormatDSL_Vec_Sim dsl1 v1 ->
+      FormatDSL_Vec_Sim dsl2 v2 ->
+      FormatDSL_Vec_Sim (FL_Sequence dsl1 dsl2) (Vector.append v1 v2)
   .
 
-  Lemma SpecsDSL_vec_atomic {n}
-    : forall dsl (dsls : Vector.t (SpecsDSL A T) (S n)),
-      SpecsDSL_Vec_Sim dsl dsls -> forall d, Vector.In d dsls -> SpecsDSL_Atomic d.
+  Lemma FormatDSL_vec_atomic {n}
+    : forall dsl (dsls : Vector.t (FormatDSL A T) (S n)),
+      FormatDSL_Vec_Sim dsl dsls -> forall d, Vector.In d dsls -> FormatDSL_Atomic d.
   Proof.
     intros. induction H.
     - inversion H0. eauto. inversion H3.
