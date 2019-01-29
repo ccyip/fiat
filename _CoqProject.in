@@ -176,6 +176,7 @@ src/Narcissus/Common/Specs.v
 src/Narcissus/Common/SpecsDSL.v
 src/Narcissus/Common/SpecsSeq.v
 src/Narcissus/Common/SpecsSimpl.v
+src/Narcissus/Common/SpecsRules.v
 src/Narcissus/Common/WordFacts.v
 src/Narcissus/ComplementaryFormats/ComplementaryFormat.v
 src/Narcissus/Examples/ByteAlignedExample.v
