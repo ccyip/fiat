@@ -3,8 +3,7 @@ Require Export
         Fiat.Narcissus.BaseFormats
         Fiat.Narcissus.Common.SpecsDSL.
 
-Require MoreVectors.Vector.
-Import Vector.VectorNotations.
+Require Import Lia.
 
 Section Specification_Sequence.
 
@@ -12,39 +11,57 @@ Section Specification_Sequence.
   Variable T : Type.
   Context {monoid : Monoid T}.
 
-  Inductive FormatSeq n : Type :=
-  | FS_intro: Vector.t (FormatDSL A T) (S n) ->
-              Vector.t bool (S n) ->
-              Vector.t bool (S (S n)) ->
-              FormatSeq n.
+  Record FormatSeg : Type :=
+    {
+      FS_Fmt : FormatDSL A T;
+      FS_Used : bool;
+      FS_Known : bool;
+    }.
 
-  Definition FormatSeq_lift {n} (dsls : Vector.t (FormatDSL A T) (S n))
-    : FormatSeq n :=
-    FS_intro dsls (Vector.repeat false (S n)) (Vector.repeat false (S (S n))).
+  Record FormatSeq : Type :=
+    {
+      FS_Segs : list FormatSeg;
+      FS_LastKnown : bool;
+    }.
 
-  Definition FormatSeq_erase {n} (seq : FormatSeq n)
-    : Vector.t _ _ :=
-    match seq with
-    | FS_intro dsls _ _ => dsls
-    end.
+  Definition FormatSeq_wellformed (seq : FormatSeq) := 1 <= length (FS_Segs seq).
 
-  Inductive FormatDSL_Vec_Sim : FormatDSL A T -> forall {n}, Vector.t (FormatDSL A T) (S n) -> Prop :=
-  | FVS_Atomic: forall dsl,
-      FormatDSL_Atomic dsl ->
-      FormatDSL_Vec_Sim dsl (Vector.cons _ dsl _ (Vector.nil _))
-  | FVS_Sequence: forall dsl1 {m} (v1 : Vector.t _ (S m)) dsl2 {n} (v2 : Vector.t _ (S n)),
-      FormatDSL_Vec_Sim dsl1 v1 ->
-      FormatDSL_Vec_Sim dsl2 v2 ->
-      FormatDSL_Vec_Sim (FL_Sequence dsl1 dsl2) (Vector.append v1 v2)
+  Definition FormatSeq_lift (dsls : list (FormatDSL A T))
+    : FormatSeq :=
+    {| FS_Segs := map (fun fmt => {| FS_Fmt := fmt;
+                                  FS_Used := false; FS_Known := false |})
+                      dsls;
+       FS_LastKnown := false |}.
+
+  Definition FormatSeq_erase (seq : FormatSeq)
+    : list (FormatDSL A T) :=
+    map (fun seg => FS_Fmt seg) (FS_Segs seq).
+
+  Inductive FormatDSL_Seq_Sim : FormatDSL A T -> list (FormatDSL A T) -> Prop :=
+  | FVS_Atomic: forall fmt,
+      FormatDSL_atomic fmt = true ->
+      FormatDSL_Seq_Sim fmt [fmt]
+  | FVS_Sequence: forall fmt1 l1 fmt2 l2,
+      FormatDSL_Seq_Sim fmt1 l1 ->
+      FormatDSL_Seq_Sim fmt2 l2 ->
+      FormatDSL_Seq_Sim (FL_Sequence fmt1 fmt2) (l1 ++ l2)
   .
 
-  Lemma FormatDSL_vec_atomic {n}
-    : forall dsl (dsls : Vector.t (FormatDSL A T) (S n)),
-      FormatDSL_Vec_Sim dsl dsls -> forall d, Vector.In d dsls -> FormatDSL_Atomic d.
+  Lemma FormatDSL_seq_atomic
+    : forall fmt l, FormatDSL_Seq_Sim fmt l -> forall f, In f l -> FormatDSL_atomic f = true.
   Proof.
     intros. induction H.
-    - inversion H0. eauto. inversion H3.
-    - destruct (Vector.in_app_or v1 v2 d H0); eauto.
+    - inversion H0; subst; eauto.
+    - apply in_app_or in H0. destruct H0; eauto.
+  Qed.
+
+  Lemma FormatDSL_seq_wellformed
+    : forall fmt l, FormatDSL_Seq_Sim fmt l -> FormatSeq_wellformed (FormatSeq_lift l).
+  Proof.
+    intros; induction H.
+    - intuition.
+    - simpl. unfold FormatSeq_wellformed in *.
+      simpl in *. autorewrite with list in *. lia.
   Qed.
 
 End Specification_Sequence.
