@@ -9,6 +9,8 @@ Require MoreVectors.Vector.
 
 Import LeastFixedPointFun.
 
+Unset Implicit Arguments.
+
 Definition GammaT := list Type.
 Definition GammaF (gamma : GammaT) := cfunType gamma.
 Definition ConstrT gamma S := GammaF gamma (S -> Prop).
@@ -45,6 +47,41 @@ Definition Compose_Decode' {S T S'} (dec1 : DecodeM (S'*T) T) (dec2 : DecodeM S 
 
 Definition Lift_Decode {S T} `{Monoid T} (dec : DecodeM S T) : DecodeM (S*T) T :=
   fun t => s <- dec t; Some (s, mempty).
+
+Inductive FormatSeq_PickOne :
+  forall {S T} (seq seq' : FormatSeq S T),
+    Fin.t (FormatSeq_nodes_num seq) -> Fin.t (FormatSeq_nodes_num seq) ->
+    bool -> FormatDSL S T -> bool -> Prop :=
+
+| PO_Single: forall S T b1 b2 (fmt : FormatDSL S T),
+    orb b1 b2 = true ->
+    FormatSeq_PickOne {| FS_Segs := [{| FS_Known := b1; FS_Fmt := fmt; FS_Used := false |}];
+                         FS_LastKnown := b2 |}
+                      {| FS_Segs := [{| FS_Known := true; FS_Fmt := fmt; FS_Used := true |}];
+                         FS_LastKnown := true |}
+                      Fin.F1 (Fin.FS Fin.F1) b1 fmt b2
+
+| PO_Tail: forall S T b1 b2 (fmt fmt' : FormatDSL S T) segs lk u,
+    orb b1 b2 = true ->
+    FormatSeq_PickOne {| FS_Segs := {| FS_Known := b1; FS_Fmt := fmt; FS_Used := false |}
+                                      :: {| FS_Known := b2; FS_Fmt := fmt'; FS_Used := u |}
+                                      :: segs ;
+                         FS_LastKnown := lk |}
+                      {| FS_Segs := {| FS_Known := true; FS_Fmt := fmt; FS_Used := true |}
+                                      :: {| FS_Known := true; FS_Fmt := fmt'; FS_Used := u |}
+                                      :: segs ;
+                         FS_LastKnown := lk |}
+                      Fin.F1 (Fin.FS Fin.F1) b1 fmt b2
+
+| PO_Head: forall S T segs lk segs' lk' i j b1 b2 (fmt : FormatDSL S T) seg,
+    FormatSeq_PickOne {| FS_Segs := segs; FS_LastKnown := lk |}
+                      {| FS_Segs := segs'; FS_LastKnown := lk' |}
+                      i j b1 fmt b2 ->
+    FormatSeq_PickOne {| FS_Segs := seg :: segs; FS_LastKnown := lk |}
+                      {| FS_Segs := seg :: segs'; FS_LastKnown := lk' |}
+                      (Fin.FS i) (Fin.FS j) b1 fmt b2
+
+.
 
 Inductive FormatDSL_CorrectDecoder :
   forall {S T A} (gamma : GammaT), ConstrT gamma S -> FormatDSL S A ->
