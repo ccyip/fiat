@@ -28,9 +28,9 @@ Section Specification_Sequence.
 
   Definition FormatSeq_nodes (seq : FormatSeq) := (map FS_Known (FS_Segs seq)) ++ [FS_LastKnown seq].
 
-  Definition FormatSeq_nodes_num' (seq : FormatSeq) := S (length (FS_Segs seq)).
+  Definition FormatSeq_nodes_num (seq : FormatSeq) := S (length (FS_Segs seq)).
 
-  Definition FormatSeq_nodes_num (seq : FormatSeq) := length (FormatSeq_nodes seq).
+  Definition FormatSeq_nodes_num' (seq : FormatSeq) := length (FormatSeq_nodes seq).
 
   Lemma FormatSeq_nodes_num_eq (seq : FormatSeq)
     : FormatSeq_nodes_num seq = FormatSeq_nodes_num' seq.
@@ -98,12 +98,12 @@ Section Specification_Sequence.
       simpl in *. autorewrite with list in *. lia.
   Qed.
 
-  Fixpoint FormatSeq_prev_known' (l : list bool)
-    : Fin.t (length l) -> option (Fin.t (length l)) :=
+  Fixpoint FormatSeq_prev_known' (l : list FormatSeg)
+    : Fin.t (S (length l)) -> option (Fin.t (S (length l))) :=
     match l with
     | [] => fun _ => None
-    | b :: l' =>
-      fun i : Fin.t (S (length l')) =>
+    | {| FS_Known := b |} :: l' =>
+      fun i : Fin.t (S (S (length l'))) =>
         Fin.caseS' i _ None
                    (fun i' =>
                       match FormatSeq_prev_known' l' i' with
@@ -114,32 +114,33 @@ Section Specification_Sequence.
 
   Definition FormatSeq_prev_known (seq : FormatSeq) (i : Fin.t (FormatSeq_nodes_num seq))
     : option (Fin.t (FormatSeq_nodes_num seq)) :=
-    FormatSeq_prev_known' (FormatSeq_nodes seq) i.
+    FormatSeq_prev_known' (FS_Segs seq) i.
 
-  Fixpoint FormatSeq_first_known (l : list bool)
-    : option (Fin.t (length l)) :=
+  Fixpoint FormatSeq_first_known (l : list FormatSeg) (k : bool)
+    : option (Fin.t (S (length l))) :=
     match l with
-    | [] => None
-    | b :: l' => if b then Some Fin.F1 else
-                 match FormatSeq_first_known l' with
-                 | Some j => Some (Fin.FS j)
-                 | None => None
-                 end
+    | [] => if k then Some Fin.F1 else None
+    | {| FS_Known := b |} :: l' =>
+      if b then Some Fin.F1 else
+        match FormatSeq_first_known l' k with
+        | Some j => Some (Fin.FS j)
+        | None => None
+        end
     end.
 
-  Fixpoint FormatSeq_next_known' (l : list bool)
-    : Fin.t (length l) -> option (Fin.t (length l)) :=
+  Fixpoint FormatSeq_next_known' (l : list FormatSeg) (k : bool)
+    : Fin.t (S (length l)) -> option (Fin.t (S (length l))) :=
     match l with
     | [] => fun _ => None
-    | b :: l' =>
-      fun i : Fin.t (S (length l')) =>
+    | {| FS_Known := b |} :: l' =>
+      fun i : Fin.t (S (S (length l'))) =>
         Fin.caseS' i _
-                   (match FormatSeq_first_known l' with
+                   (match FormatSeq_first_known l' k with
                     | Some j => Some (Fin.FS j)
                     | None => None
                     end)
                    (fun i' =>
-                      match FormatSeq_next_known' l' i' with
+                      match FormatSeq_next_known' l' k i' with
                       | Some j => Some (Fin.FS j)
                       | None => None
                       end)
@@ -147,6 +148,6 @@ Section Specification_Sequence.
 
   Definition FormatSeq_next_known (seq : FormatSeq) (i : Fin.t (FormatSeq_nodes_num seq))
     : option (Fin.t (FormatSeq_nodes_num seq)) :=
-    FormatSeq_next_known' (FormatSeq_nodes seq) i.
+    FormatSeq_next_known' (FS_Segs seq) (FS_LastKnown seq) i.
 
 End Specification_Sequence.

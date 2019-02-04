@@ -5,12 +5,15 @@ Require Export
         Fiat.Narcissus.Common.SpecsSeq
         Fiat.Computation.FixComp.
 
+Require MoreVectors.Vector.
+
 Import LeastFixedPointFun.
 
 Definition GammaT := list Type.
 Definition GammaF (gamma : GammaT) := cfunType gamma.
 Definition ConstrT gamma S := GammaF gamma (S -> Prop).
 Definition DecT gamma S T := GammaF gamma (DecodeM S T).
+Definition DecT' gamma S T n := GammaF gamma (Vector.t nat n -> DecodeM S T).
 
 Definition GammaF_fmap {S T} (f : S -> T)
   : forall {gamma : GammaT}, GammaF gamma S -> GammaF gamma T :=
@@ -80,6 +83,20 @@ Inductive FormatDSL_CorrectDecoder :
     ~(R ~= FL_Arbitrary (@IdentityFormat A)) ->
     FormatDSL_CorrectDecoder gamma C (FL_Compose R fmt2) (FL_Compose fmt1 fmt2) dec1
 
+| CD_Sequence: forall S A T `{Monoid T} gamma C
+                 (fmt1 fmt2 : FormatDSL S T)
+                 seq dec
+                 (R : FormatDSL S A) l seq',
+    FormatDSL_Seq_Sim (FL_Sequence fmt1 fmt2) l ->
+    FormatSeq_know_first (FormatSeq_lift l) = Some seq' ->
+    FormatSeq_know_last seq' = seq ->
+    FormatSeq_CorrectDecoder gamma C R seq dec ->
+    FormatDSL_CorrectDecoder gamma C R (FL_Sequence fmt1 fmt2)
+                             (GammaF_fmap (fun dec t =>
+                                             let v := Vector.repeat (bin_measure t) (FormatSeq_nodes_num seq) in
+                                             st <- dec (Vector.replace v Fin.F1 0) t;
+                                               Some (fst st))
+                                          dec)
 
 with AFormatDSL_CorrectDecoder :
        forall {S T A} (gamma : GammaT), ConstrT gamma S -> FormatDSL S A ->
@@ -154,7 +171,37 @@ with AFormatDSL_CorrectDecoder :
     ~(R ~= FL_Arbitrary (@IdentityFormat A)) ->
     AFormatDSL_CorrectDecoder gamma C (FL_Compose R fmt2) (AFL_Left (FL_Compose fmt1 fmt2)) dec1
 
+| CDR_Sequence: forall S A T `{Monoid T} gamma C
+                 (fmt1 fmt2 : FormatDSL S T)
+                 seq dec
+                 (R : FormatDSL S A) l seq',
+    FormatDSL_Seq_Sim (FL_Sequence fmt1 fmt2) l ->
+    FormatSeq_know_first (FormatSeq_lift l) = Some seq' ->
+    FormatSeq_know_last seq' = seq ->
+    FormatSeq_CorrectDecoder gamma C R seq dec ->
+    AFormatDSL_CorrectDecoder gamma C R (AFL_Right (FL_Sequence fmt1 fmt2))
+                             (GammaF_fmap (fun dec t =>
+                                             let v := Vector.repeat 0 (FormatSeq_nodes_num seq) in
+                                             dec v t)
+                                          dec)
+
+| CDL_Sequence: forall S A T `{Monoid T} gamma C
+                 (fmt1 fmt2 : FormatDSL S T)
+                 seq dec
+                 (R : FormatDSL S A) l seq',
+    FormatDSL_Seq_Sim (FL_Sequence fmt1 fmt2) l ->
+    FormatSeq_know_first (FormatSeq_lift l) = Some seq' ->
+    FormatSeq_know_last seq' = seq ->
+    FormatSeq_CorrectDecoder gamma C R seq dec ->
+    AFormatDSL_CorrectDecoder gamma C R (AFL_Left (FL_Sequence fmt1 fmt2))
+                             (GammaF_fmap (fun dec t =>
+                                             let v := Vector.repeat (bin_measure t) (FormatSeq_nodes_num seq) in
+                                             dec v t)
+                                          dec)
+
+
 with FormatSeq_CorrectDecoder :
        forall {S T A} (gamma : GammaT), ConstrT gamma S -> FormatDSL S A ->
-                         FormatSeq S T -> DecT gamma (S*T) T -> Prop :=
+                                   forall seq : FormatSeq S T,
+                                     DecT' gamma (A*T) T (FormatSeq_nodes_num seq) -> Prop :=
 .
