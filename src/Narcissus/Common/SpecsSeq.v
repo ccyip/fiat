@@ -37,6 +37,25 @@ Section Specification_Sequence.
     : list (FormatDSL A T) :=
     map (fun seg => FS_Fmt seg) (FS_Segs seq).
 
+  Definition FormatSeq_know_first (seq : FormatSeq)
+    : option FormatSeq :=
+    match seq with
+    | {| FS_Segs := segs; FS_LastKnown := lk|} =>
+      match segs with
+      | [] => None
+      | {| FS_Fmt := fmt; FS_Used := u |} :: segs' =>
+        Some {| FS_Segs := {| FS_Fmt := fmt; FS_Used := u; FS_Known := true |} :: segs';
+                FS_LastKnown := lk |}
+      end
+    end.
+
+  Definition FormatSeq_know_last (seq : FormatSeq)
+    : FormatSeq :=
+    match seq with
+    | {| FS_Segs := segs |} =>
+      {| FS_Segs := segs; FS_LastKnown := true |}
+    end.
+
   Inductive FormatDSL_Seq_Sim : FormatDSL A T -> list (FormatDSL A T) -> Prop :=
   | FVS_Atomic: forall fmt,
       FormatDSL_atomic fmt = true ->
