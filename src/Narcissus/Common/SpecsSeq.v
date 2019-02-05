@@ -150,4 +150,11 @@ Section Specification_Sequence.
     : option (Fin.t (FormatSeq_nodes_num seq)) :=
     FormatSeq_next_known' (FS_Segs seq) (FS_LastKnown seq) i.
 
+  Definition FormatSeq_all_done (seq : FormatSeq) : bool :=
+    andb (forallb (fun seg => andb (FS_Known seg) (FS_Used seg)) (FS_Segs seq))
+         (FS_LastKnown seq).
+
 End Specification_Sequence.
+
+Global Arguments FormatSeq_prev_known [_ _] _ _.
+Global Arguments FormatSeq_next_known [_ _] _ _.

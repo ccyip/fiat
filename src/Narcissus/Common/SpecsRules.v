@@ -33,11 +33,24 @@ Definition GammaF_fmap2 {S S' T} (f : S -> S' -> T)
     | A :: gamma' => fun s s' => fun a => rec gamma' (s a) (s' a)
     end.
 
+Definition GammaF_fmap2' {S S' A' T} (f : S -> (A' -> S') -> T)
+  : forall {gamma : GammaT}, GammaF gamma S -> GammaF (A' :: gamma) S' -> GammaF gamma T :=
+  fix rec gamma :=
+    match gamma with
+    | [] => fun s s' => f s s'
+    | A :: gamma' => fun s s' => fun a => rec gamma' (s a) (fun a' => s' a' a)
+    end.
+
 Definition compose_constr {S A gamma} (fmt : FormatDSL S A) (C : ConstrT gamma S)
   : ConstrT gamma A :=
   GammaF_fmap
     (fun C =>
        fun a => exists s, (FormatDSL_denote fmt) s ∋ a /\ C s) C.
+
+Definition conj_constr {S A gamma} (R : FormatDSL S A) (C : ConstrT gamma S)
+  : ConstrT (A :: gamma) S :=
+  fun a => GammaF_fmap
+           (fun C => fun s => C s /\ (FormatDSL_denote R) s ∋ a) C.
 
 Definition Union_Decode' {S T} P0 dec1 dec2 := @Union_Decode S T dec1 dec2 P0.
 
@@ -47,6 +60,7 @@ Definition Compose_Decode' {S T S'} (dec1 : DecodeM (S'*T) T) (dec2 : DecodeM S 
 
 Definition Lift_Decode {S T} `{Monoid T} (dec : DecodeM S T) : DecodeM (S*T) T :=
   fun t => s <- dec t; Some (s, mempty).
+
 
 Inductive FormatSeq_PickOne :
   forall {S T} (seq seq' : FormatSeq S T),
@@ -241,4 +255,92 @@ with FormatSeq_CorrectDecoder :
        forall {S T A} (gamma : GammaT), ConstrT gamma S -> FormatDSL S A ->
                                    forall seq : FormatSeq S T,
                                      DecT' gamma (A*T) T (FormatSeq_nodes_num seq) -> Prop :=
+
+(* | CDN_Step: forall S A1 T `{SliceMonoidOpt T} A2 gamma C seq seq' (fmt : FormatDSL S T) i j *)
+(*               dec1 dec2 *)
+(*               (R1 : FormatDSL S A1) (R2 : FormatDSL S A2), *)
+(*     FormatSeq_PickOne seq seq' i j true fmt true -> *)
+(*     AFormatDSL_CorrectDecoder gamma C R1 (AFL_None fmt) dec1 -> *)
+(*     FormatSeq_CorrectDecoder (A1 :: gamma) (conj_constr R1 C) R2 seq' dec2 -> *)
+(*     FormatSeq_CorrectDecoder gamma C R2 seq *)
+(*                              (GammaF_fmap2' *)
+(*                                 (fun dec1 dec2 v t => *)
+(*                                    let li := Vector.nth v i in *)
+(*                                    let lj := Vector.nth v j in *)
+(*                                    st <- dec1 (mslice t li lj); *)
+(*                                      dec2 (fst st) v t) *)
+(*                                 dec1 dec2) *)
+
+(* | CDR_Step1: forall S A1 T `{SliceMonoidOpt T} A2 gamma C seq seq' (fmt : FormatDSL S T) i j k *)
+(*               dec1 dec2 *)
+(*               (R1 : FormatDSL S A1) (R2 : FormatDSL S A2), *)
+(*     FormatSeq_PickOne seq seq' i j true fmt false -> *)
+(*     AFormatDSL_CorrectDecoder gamma C R1 (AFL_Right fmt) dec1 -> *)
+(*     FormatSeq_CorrectDecoder (A1 :: gamma) (conj_constr R1 C) R2 seq' dec2 -> *)
+(*     FormatSeq_next_known seq i = Some k -> *)
+(*     FormatSeq_CorrectDecoder gamma C R2 seq *)
+(*                              (GammaF_fmap2' *)
+(*                                 (fun dec1 dec2 v t => *)
+(*                                    let li := Vector.nth v i in *)
+(*                                    let lk := Vector.nth v k in *)
+(*                                    st <- dec1 (mslice t li lk); *)
+(*                                      dec2 (fst st) (Vector.replace v j (lk - (bin_measure (snd st)))) t) *)
+(*                                 dec1 dec2) *)
+
+(* | CDR_Step2: forall S A1 T `{SliceMonoidOpt T} A2 gamma C seq seq' (fmt : FormatDSL S T) i j *)
+(*               dec1 dec2 *)
+(*               (R1 : FormatDSL S A1) (R2 : FormatDSL S A2), *)
+(*     FormatSeq_PickOne seq seq' i j true fmt false -> *)
+(*     AFormatDSL_CorrectDecoder gamma C R1 (AFL_Right fmt) dec1 -> *)
+(*     FormatSeq_CorrectDecoder (A1 :: gamma) (conj_constr R1 C) R2 seq' dec2 -> *)
+(*     FormatSeq_next_known seq i = None -> *)
+(*     FormatSeq_CorrectDecoder gamma C R2 seq *)
+(*                              (GammaF_fmap2' *)
+(*                                 (fun dec1 dec2 v t => *)
+(*                                    let li := Vector.nth v i in *)
+(*                                    let lk := bin_measure t in *)
+(*                                    st <- dec1 (mslice t li lk); *)
+(*                                      dec2 (fst st) (Vector.replace v j (lk - (bin_measure (snd st)))) t) *)
+(*                                 dec1 dec2) *)
+
+(* | CDL_Step1: forall S A1 T `{SliceMonoidOpt T} A2 gamma C seq seq' (fmt : FormatDSL S T) i j k *)
+(*               dec1 dec2 *)
+(*               (R1 : FormatDSL S A1) (R2 : FormatDSL S A2), *)
+(*     FormatSeq_PickOne seq seq' i j false fmt true -> *)
+(*     AFormatDSL_CorrectDecoder gamma C R1 (AFL_Left fmt) dec1 -> *)
+(*     FormatSeq_CorrectDecoder (A1 :: gamma) (conj_constr R1 C) R2 seq' dec2 -> *)
+(*     FormatSeq_prev_known seq i = Some k -> *)
+(*     FormatSeq_CorrectDecoder gamma C R2 seq *)
+(*                              (GammaF_fmap2' *)
+(*                                 (fun dec1 dec2 v t => *)
+(*                                    let lj := Vector.nth v j in *)
+(*                                    let lk := Vector.nth v k in *)
+(*                                    st <- dec1 (mslice t lk lj); *)
+(*                                      dec2 (fst st) (Vector.replace v j (lk + (bin_measure (snd st)))) t) *)
+(*                                 dec1 dec2) *)
+
+(* | CDL_Step2: forall S A1 T `{SliceMonoidOpt T} A2 gamma C seq seq' (fmt : FormatDSL S T) i j *)
+(*               dec1 dec2 *)
+(*               (R1 : FormatDSL S A1) (R2 : FormatDSL S A2), *)
+(*     FormatSeq_PickOne seq seq' i j false fmt true -> *)
+(*     AFormatDSL_CorrectDecoder gamma C R1 (AFL_Left fmt) dec1 -> *)
+(*     FormatSeq_CorrectDecoder (A1 :: gamma) (conj_constr R1 C) R2 seq' dec2 -> *)
+(*     FormatSeq_prev_known seq i = None -> *)
+(*     FormatSeq_CorrectDecoder gamma C R2 seq *)
+(*                              (GammaF_fmap2' *)
+(*                                 (fun dec1 dec2 v t => *)
+(*                                    let lj := Vector.nth v j in *)
+(*                                    let lk := 0 in *)
+(*                                    st <- dec1 (mslice t lk lj); *)
+(*                                      dec2 (fst st) (Vector.replace v j (lk + (bin_measure (snd st)))) t) *)
+(*                                 dec1 dec2) *)
+
+| CD_Done: forall S A T `{Monoid T} gamma C seq dec (R : FormatDSL S A),
+    FormatDSL_CorrectDecoder gamma C R (FL_Arbitrary UnitFormat) dec ->
+    FormatSeq_all_done seq = true ->
+    FormatSeq_CorrectDecoder gamma C R seq
+                             (GammaF_fmap
+                                (fun dec _ _ => s <- dec tt; Some (s, mempty))
+                             dec)
+
 .

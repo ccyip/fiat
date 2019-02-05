@@ -73,6 +73,14 @@ Class QueueMonoidOpt (bin : Type) (trans : Monoid bin) (B : Type) :=
         b = b'
   }.
 
+Class SliceMonoidOpt (bin : Type) (trans : Monoid bin) :=
+  { mslice : bin -> nat -> nat -> bin;
+    (* Should we use the "existential" spec? *)
+    mslice_spec : forall t t1 t2 t3,
+        t = mappend (mappend t1 t2) t3 ->
+        mslice t (bin_measure t1) (bin_measure t2) = t2
+  }.
+
   Definition lt_B {B} {monoid : Monoid B} (b b' : B) : Prop :=
     bin_measure b < bin_measure b'.
 

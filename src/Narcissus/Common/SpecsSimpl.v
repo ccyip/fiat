@@ -161,6 +161,8 @@ Definition CorrectDecoder_partial
 
 Definition IdentityFormat {S} : FormatM S S := eq.
 
+Definition UnitFormat {S} : FormatM S unit := fun _ => ret tt.
+
 Lemma CorrectDecoder_partial_lift {S T}
       (format : FormatM S T) (decode : DecodeM S T)
   : CorrectDecoder_partial format decode IdentityFormat <->
