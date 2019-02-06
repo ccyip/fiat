@@ -245,3 +245,38 @@ Section ListDec.
     destruct (eq_dec x x); auto.
   Qed.
 End ListDec.
+
+Class EqbDec (A : Type) :=
+  {
+    eqb : A -> A -> bool;
+    eqb_spec : forall a b, eqb a b = true <-> a = b
+  }.
+
+Global Instance EqbDec_Decidable {A} `{EqbDec A} (a b : A)
+  : Decidable (a = b) :=
+  {
+    Decidable_witness := eqb a b;
+    Decidable_spec := eqb_spec a b
+  }.
+
+Theorem eqbP {A : Type} `{EqbDec A} (a b : A) : reflect (a = b) (eqb a b).
+Proof.
+  destruct (eqb a b) eqn:?; constructor.
+  - apply eqb_spec. auto.
+  - intro. apply eqb_spec in H0. congruence.
+Qed.
+
+Theorem eqb_refl {A : Type} `{EqbDec A} (a : A) : eqb a a = true.
+Proof.
+  destruct (eqbP a a); easy.
+Qed.
+
+Theorem eqb_true_iff {A : Type} `{EqbDec A} :  forall a b : A, eqb a b = true <-> a = b.
+Proof.
+  apply eqb_spec.
+Qed.
+
+Theorem eqb_false_iff {A : Type} `{EqbDec A} :  forall a b : A, eqb a b = false <-> a <> b.
+Proof.
+  intros; destruct (eqbP a b); easy.
+Qed.
