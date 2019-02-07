@@ -99,26 +99,30 @@ End TotalMaps.
 
 Arguments total_map: clear implicits.
 
-Notation "{ --> d }" := (t_empty d) (at level 0).
+Bind Scope maps_scope with total_map.
+
+Notation "{ --> d }" := (t_empty d) (at level 0) : maps_scope.
 
 Notation "m '&' { a --> x }" :=
-  (t_update m a x) (at level 20).
+  (t_update m a x) (at level 20) : maps_scope.
 Notation "m '&' { a --> x ; b --> y }" :=
-  (t_update (m & { a --> x }) b y) (at level 20).
+  (t_update (m & { a --> x }) b y) (at level 20) : maps_scope.
 Notation "m '&' { a --> x ; b --> y ; c --> z }" :=
-  (t_update (m & { a --> x ; b --> y }) c z) (at level 20).
+  (t_update (m & { a --> x ; b --> y }) c z) (at level 20) : maps_scope.
 Notation "m '&' { a --> x ; b --> y ; c --> z ; d --> t }" :=
-    (t_update (m & { a --> x ; b --> y ; c --> z }) d t) (at level 20).
+    (t_update (m & { a --> x ; b --> y ; c --> z }) d t) (at level 20) : maps_scope.
 Notation "m '&' { a --> x ; b --> y ; c --> z ; d --> t ; e --> u }" :=
-    (t_update (m & { a --> x ; b --> y ; c --> z ; d --> t }) e u) (at level 20).
+    (t_update (m & { a --> x ; b --> y ; c --> z ; d --> t }) e u) (at level 20) : maps_scope.
 Notation "m '&' { a --> x ; b --> y ; c --> z ; d --> t ; e --> u ; f --> v }" :=
-    (t_update (m & { a --> x ; b --> y ; c --> z ; d --> t ; e --> u }) f v) (at level 20).
+    (t_update (m & { a --> x ; b --> y ; c --> z ; d --> t ; e --> u }) f v) (at level 20) : maps_scope.
 
 Section PartialMaps.
 
 Context {D : Type}.
 Context {A : Type}.
 Context {eqdec : EqbDec D}.
+
+Open Scope maps_scope.
 
 Definition partial_map := total_map D (option A).
 
@@ -127,7 +131,7 @@ Definition empty : partial_map :=
 
 Definition update (m : partial_map)
            (x : D) (v : A) :=
-  m & { x --> (Some v) }.
+  (m & { x --> (Some v) }).
 
 Notation "m '&' {{ a --> x }}" :=
   (update m a x) (at level 20).
@@ -194,15 +198,17 @@ End PartialMaps.
 
 Arguments partial_map: clear implicits.
 
+Bind Scope maps_scope with partial_map.
+
 Notation "m '&' {{ a --> x }}" :=
-  (update m a x) (at level 20).
+  (update m a x) (at level 20) : maps_scope.
 Notation "m '&' {{ a --> x ; b --> y }}" :=
-  (update (m & {{ a --> x }}) b y) (at level 20).
+  (update (m & {{ a --> x }}) b y) (at level 20) : maps_scope.
 Notation "m '&' {{ a --> x ; b --> y ; c --> z }}" :=
-  (update (m & {{ a --> x ; b --> y }}) c z) (at level 20).
+  (update (m & {{ a --> x ; b --> y }}) c z) (at level 20) : maps_scope.
 Notation "m '&' {{ a --> x ; b --> y ; c --> z ; d --> t }}" :=
-    (update (m & {{ a --> x ; b --> y ; c --> z }}) d t) (at level 20).
+    (update (m & {{ a --> x ; b --> y ; c --> z }}) d t) (at level 20) : maps_scope.
 Notation "m '&' {{ a --> x ; b --> y ; c --> z ; d --> t ; e --> u }}" :=
-    (update (m & {{ a --> x ; b --> y ; c --> z ; d --> t }}) e u) (at level 20).
+    (update (m & {{ a --> x ; b --> y ; c --> z ; d --> t }}) e u) (at level 20) : maps_scope.
 Notation "m '&' {{ a --> x ; b --> y ; c --> z ; d --> t ; e --> u ; f --> v }}" :=
-    (update (m & {{ a --> x ; b --> y ; c --> z ; d --> t ; e --> u }}) f v) (at level 20).
+    (update (m & {{ a --> x ; b --> y ; c --> z ; d --> t ; e --> u }}) f v) (at level 20) : maps_scope.

@@ -163,6 +163,8 @@ Definition IdentityFormat {S} : FormatM S S := eq.
 
 Definition UnitFormat {S} : FormatM S unit := fun _ => ret tt.
 
+Definition EmptyFormat {S T} `{Monoid T} : FormatM S T := fun _ => ret mempty.
+
 Lemma CorrectDecoder_partial_lift {S T}
       (format : FormatM S T) (decode : DecodeM S T)
   : CorrectDecoder_partial format decode IdentityFormat <->

@@ -1,17 +1,19 @@
 Require Export
+        Fiat.Common.Maps
         Fiat.Narcissus.Common.SpecsSimpl
         Fiat.Narcissus.BaseFormats
         Fiat.Narcissus.Common.SpecsDSL.
 
 Require Import Lia.
 
-Open Scope list_scope.
-
 Section Specification_Sequence.
 
   Variable A : Type.
   Variable T : Type.
   Context {monoid : Monoid T}.
+
+  Open Scope list_scope.
+  Open Scope maps_scope.
 
   Record FormatSeg : Type :=
     {
@@ -20,55 +22,49 @@ Section Specification_Sequence.
       FS_Known : bool;
     }.
 
-  Record FormatSeq : Type :=
+  Global Instance EqbDec_nat : Decidable.EqbDec nat :=
     {
-      FS_Segs : list FormatSeg;
-      FS_LastKnown : bool;
+      eqb := Nat.eqb;
+      eqb_spec := PeanoNat.Nat.eqb_eq
     }.
 
-  Definition FormatSeq_nodes (seq : FormatSeq) := (map FS_Known (FS_Segs seq)) ++ [FS_LastKnown seq].
+  (* Maybe I should pack the number of nodes into it *)
+  Definition FormatSeq := total_map nat FormatSeg.
 
-  Definition FormatSeq_nodes_num (seq : FormatSeq) := S (length (FS_Segs seq)).
+  Definition FormatSeq_default := {| FS_Fmt := FL_Arbitrary EmptyFormat;
+                                     FS_Used := true;
+                                     FS_Known := false |}.
 
-  Definition FormatSeq_nodes_num' (seq : FormatSeq) := length (FormatSeq_nodes seq).
+  (* Fixpoint FormatSeq_lift (l : list (FormatDSL A T)) *)
+  (*   : FormatSeq := *)
+  (*   match l with *)
+  (*   | [] => {--> FormatSeq_default } *)
+  (*   | fmt :: l' => fun i => *)
+  (*                  match i with *)
+  (*                  | O => {| FS_Fmt := fmt; FS_Used := false; FS_Known := false |} *)
+  (*                  | S i' => FormatSeq_lift l' i' *)
+  (*                  end *)
+  (*   end. *)
 
-  Lemma FormatSeq_nodes_num_eq (seq : FormatSeq)
-    : FormatSeq_nodes_num seq = FormatSeq_nodes_num' seq.
-  Proof.
-    unfold FormatSeq_nodes_num, FormatSeq_nodes_num', FormatSeq_nodes.
-    autorewrite with list. simpl. lia.
-  Qed.
-
-  Definition FormatSeq_wellformed (seq : FormatSeq) := 1 <= length (FS_Segs seq).
-
-  Definition FormatSeq_lift (dsls : list (FormatDSL A T))
+  Fixpoint FormatSeq_lift' (l : list (FormatDSL A T)) (i : nat) (seq : FormatSeq)
     : FormatSeq :=
-    {| FS_Segs := map (fun fmt => {| FS_Fmt := fmt;
-                                  FS_Used := false; FS_Known := false |})
-                      dsls;
-       FS_LastKnown := false |}.
-
-  Definition FormatSeq_erase (seq : FormatSeq)
-    : list (FormatDSL A T) :=
-    map (fun seg => FS_Fmt seg) (FS_Segs seq).
-
-  Definition FormatSeq_know_first (seq : FormatSeq)
-    : option FormatSeq :=
-    match seq with
-    | {| FS_Segs := segs; FS_LastKnown := lk|} =>
-      match segs with
-      | [] => None
-      | {| FS_Fmt := fmt; FS_Used := u |} :: segs' =>
-        Some {| FS_Segs := {| FS_Fmt := fmt; FS_Used := u; FS_Known := true |} :: segs';
-                FS_LastKnown := lk |}
-      end
+    match l with
+    | [] => seq
+    | fmt :: l' =>
+      t_update (FormatSeq_lift' l' (S i) seq) i
+               {| FS_Fmt := fmt; FS_Used := false; FS_Known := false |}
     end.
 
-  Definition FormatSeq_know_last (seq : FormatSeq)
+  Fixpoint FormatSeq_lift (l : list (FormatDSL A T))
     : FormatSeq :=
-    match seq with
-    | {| FS_Segs := segs |} =>
-      {| FS_Segs := segs; FS_LastKnown := true |}
+    FormatSeq_lift' l 0 {--> FormatSeq_default}.
+
+  Definition FormatSeq_know_nth (seq : FormatSeq) (i : nat)
+    : FormatSeq :=
+    match seq i with
+    | {| FS_Fmt := fmt; FS_Used := u |} => t_update seq i {| FS_Fmt := fmt;
+                                                             FS_Used := u;
+                                                             FS_Known := true|}
     end.
 
   Inductive FormatDSL_Seq_Sim : FormatDSL A T -> list (FormatDSL A T) -> Prop :=
@@ -89,72 +85,21 @@ Section Specification_Sequence.
     - apply in_app_or in H0. destruct H0; eauto.
   Qed.
 
-  Lemma FormatDSL_seq_wellformed
-    : forall fmt l, FormatDSL_Seq_Sim fmt l -> FormatSeq_wellformed (FormatSeq_lift l).
-  Proof.
-    intros; induction H.
-    - intuition.
-    - simpl. unfold FormatSeq_wellformed in *.
-      simpl in *. autorewrite with list in *. lia.
-  Qed.
+  Definition FormatSeq_is_next_known (seq : FormatSeq) (i : nat) (k : nat) :=
+    i < k /\ FS_Known (seq k) = true /\
+    forall j, i < j -> j < k -> FS_Known (seq j) = false.
 
-  Fixpoint FormatSeq_prev_known' (l : list FormatSeg)
-    : Fin.t (S (length l)) -> option (Fin.t (S (length l))) :=
-    match l with
-    | [] => fun _ => None
-    | {| FS_Known := b |} :: l' =>
-      fun i : Fin.t (S (S (length l'))) =>
-        Fin.caseS' i _ None
-                   (fun i' =>
-                      match FormatSeq_prev_known' l' i' with
-                      | Some j => Some (Fin.FS j)
-                      | None => if b then Some Fin.F1 else None
-                      end)
-    end.
+  Definition FormatSeq_no_next_known (seq : FormatSeq) (i : nat) :=
+    forall k, i < k -> FS_Known (seq k) = false.
 
-  Definition FormatSeq_prev_known (seq : FormatSeq) (i : Fin.t (FormatSeq_nodes_num seq))
-    : option (Fin.t (FormatSeq_nodes_num seq)) :=
-    FormatSeq_prev_known' (FS_Segs seq) i.
+  Definition FormatSeq_is_prev_known (seq : FormatSeq) (i : nat) (k : nat) :=
+    k < i /\ FS_Known (seq k) = true /\
+    forall j, k < j -> j < i -> FS_Known (seq j) = false.
 
-  Fixpoint FormatSeq_first_known (l : list FormatSeg) (k : bool)
-    : option (Fin.t (S (length l))) :=
-    match l with
-    | [] => if k then Some Fin.F1 else None
-    | {| FS_Known := b |} :: l' =>
-      if b then Some Fin.F1 else
-        match FormatSeq_first_known l' k with
-        | Some j => Some (Fin.FS j)
-        | None => None
-        end
-    end.
+  Definition FormatSeq_no_prev_known (seq : FormatSeq) (i : nat) :=
+    forall k, k < i -> FS_Known (seq k) = false.
 
-  Fixpoint FormatSeq_next_known' (l : list FormatSeg) (k : bool)
-    : Fin.t (S (length l)) -> option (Fin.t (S (length l))) :=
-    match l with
-    | [] => fun _ => None
-    | {| FS_Known := b |} :: l' =>
-      fun i : Fin.t (S (S (length l'))) =>
-        Fin.caseS' i _
-                   (match FormatSeq_first_known l' k with
-                    | Some j => Some (Fin.FS j)
-                    | None => None
-                    end)
-                   (fun i' =>
-                      match FormatSeq_next_known' l' k i' with
-                      | Some j => Some (Fin.FS j)
-                      | None => None
-                      end)
-    end.
-
-  Definition FormatSeq_next_known (seq : FormatSeq) (i : Fin.t (FormatSeq_nodes_num seq))
-    : option (Fin.t (FormatSeq_nodes_num seq)) :=
-    FormatSeq_next_known' (FS_Segs seq) (FS_LastKnown seq) i.
-
-  Definition FormatSeq_all_done (seq : FormatSeq) : bool :=
-    andb (forallb (fun seg => andb (FS_Known seg) (FS_Used seg)) (FS_Segs seq))
-         (FS_LastKnown seq).
+  Definition FormatSeq_all_done (seq : FormatSeq) :=
+    forall i, FS_Known (seq i) = true /\ FS_Used (seq i) = true.
 
 End Specification_Sequence.
-
-Global Arguments FormatSeq_prev_known [_ _] _ _.
-Global Arguments FormatSeq_next_known [_ _] _ _.
