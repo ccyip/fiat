@@ -151,13 +151,6 @@ src/Narcissus/ComplementaryFormats/ComplementaryFormat.v
 src/Narcissus/Examples/ByteAlignedExample.v
 src/Narcissus/Examples/README.v
 src/Narcissus/Examples/TutorialPrelude.v
-src/Narcissus/Examples/DNS/DNSPacket.v
-src/Narcissus/Examples/DNS/DnsOpt.v
-src/Narcissus/Examples/DNS/RRecordTypes.v
-src/Narcissus/Examples/DNS/SimpleDNSPacket.v
-src/Narcissus/Examples/DNS/SimpleDnsOpt.v
-src/Narcissus/Examples/DNS/SimpleRRecordTypes.v
-src/Narcissus/Examples/DNS/SimpleResourceRecord.v
 src/Narcissus/Examples/NetworkStack/ARPPacket.v
 src/Narcissus/Examples/NetworkStack/EthernetHeader.v
 src/Narcissus/Examples/NetworkStack/Fiat4Mirage.v
