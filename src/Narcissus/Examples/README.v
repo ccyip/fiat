@@ -149,12 +149,11 @@ Module Sensor3.
   Let enc_dec : EncoderDecoderPair format invariant.
   Proof.
     derive_encoder_decoder_pair.
-    last_failing_goal.
-    all:simpl.
+    last_failing_goal; simpl.
   Abort.
 End Sensor3.
 
-(** The derivation fails, leaving multiple Coq goals unsolved.  The most relevant is equivalent to the following:
+(** The derivation fails, leaving multiple Coq goals unsolved. The first goal shows the portion of the format where derive_encoder_decoder_pair got stuck. Using an additional tactic takes to the last goal it was unable to solve, which is equivalent to the following:
 
 <<
 forall (msg : sensor_msg)
@@ -185,12 +184,11 @@ Module Sensor4.
 
   Let enc_dec : EncoderDecoderPair format invariant.
   Proof. derive_encoder_decoder_pair.
-         last_failing_goal.
-         all:simpl.
+         last_failing_goal; simpl.
   Abort.
 End Sensor4.
 
-(** Again, decoder generation fails and spills out an unsolvable goal:
+(** Again, decoder generation fails, albeit it now gets stuck at the formatted length.   Applying our tactic again, arrives at the following unsolvable goal:
 
 <<
 forall data : sensor_msg,

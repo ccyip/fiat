@@ -22,7 +22,7 @@ Open Scope type_scope.
 Open Scope format_scope.
 Open Scope vector_scope.
 Arguments Datatypes.length {_}.
-Notation "x ⋅ y" := (Core.append_word y x) (left associativity, at level 3, format "x ⋅ y").
+Notation "x ⋅ y" := (Core.append_word y x) (left associativity, at level 4, format "x ⋅ y").
 
 Definition encoder_impl' {S P}
            (enc: { encoder : (forall sz : nat, AlignedEncodeM (S:=S) sz) & P encoder })

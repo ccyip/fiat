@@ -23,12 +23,12 @@ Require Import
         Fiat.Narcissus.Stores.EmptyStore
         Fiat.Narcissus.Automation.Solver
         Fiat.Narcissus.Automation.AlignedAutomation.
-
+Require Import Fiat.Narcissus.Examples.TutorialPrelude.
 Require Import Bedrock.Word.
 
 Import Vectors.VectorDef.VectorNotations.
 Open Scope string_scope.
-Open Scope Tuple_scope.
+Open Scope format_scope.
 
 (* Our source data type for IP packets. *)
 Record IPv4_Packet :=
@@ -61,16 +61,14 @@ Definition IPv4_Packet_Format : FormatM IPv4_Packet ByteString :=
                ++ format_bool ◦ MF
                ++ format_word ◦ FragmentOffset
                ++ format_word ◦ TTL
-               ++ format_enum ProtocolTypeCodes ◦ Protocol)%format
+               ++ format_enum ProtocolTypeCodes ◦ Protocol)
 ThenChecksum IPChecksum_Valid OfSize 16 ThenCarryOn (format_word ◦ SourceAddress
                ++ format_word ◦ DestAddress
-               ++ format_list format_word ◦ Options)%format.
+               ++ format_list format_word ◦ Options).
 
 Definition IPv4_Packet_OK (ipv4 : IPv4_Packet) :=
   lt (|ipv4.(Options)|) 11 /\
   lt (20 + 4 * |ipv4.(Options)|) (wordToNat ipv4.(TotalLength)).
-
-(* Step One: Synthesize an encoder and a proof that it is correct. *)
 
 Ltac new_encoder_rules ::=
   match goal with
@@ -78,48 +76,27 @@ Ltac new_encoder_rules ::=
     eapply @CorrectAlignedEncoderForIPChecksumThenC
   end.
 
-Definition IPv4_encoder :
-  CorrectAlignedEncoderFor IPv4_Packet_Format.
-Proof.
-  synthesize_aligned_encoder.
-Defined.
-
-(* Step Two: Extract the encoder function, and have it start encoding
-   at the start of the provided ByteString [v]. *)
-Definition IPv4_encoder_impl {sz} v r :=
-  Eval simpl in (projT1 IPv4_encoder sz v 0 r tt).
-Print IPv4_encoder_impl.
-
 Ltac apply_new_combinator_rule ::=
   match goal with
   | H : cache_inv_Property ?mnd _
-    |- CorrectDecoder _ _ _ _ (?fmt1 ThenChecksum _ OfSize _ ThenCarryOn ?format2) _ _ _ =>
+    |- CorrectDecoder _ _ _ _ (?fmt1 ThenChecksum _ OfSize _ ThenCarryOn ?format2) _ _ _ =>    
     eapply compose_IPChecksum_format_correct' with (format1 := fmt1);
     [ exact H
     | repeat calculate_length_ByteString
     | repeat calculate_length_ByteString
     | solve_mod_8
     | solve_mod_8
-    | intros; normalize_format; apply_rules
+    | normalize_format; apply_rules
     | normalize_format; apply_rules
     | solve_Prefix_Format
     ]
   end.
 
-(* Step Three: Synthesize a decoder and a proof that /it/ is correct. *)
-Definition IPv4_Packet_Header_decoder
-  : CorrectAlignedDecoderFor IPv4_Packet_OK IPv4_Packet_Format.
-Proof.
-  synthesize_aligned_decoder.
-Defined.
+Let enc_dec : EncoderDecoderPair IPv4_Packet_Format IPv4_Packet_OK.
+Proof. derive_encoder_decoder_pair. Defined.
 
-Print Assumptions IPv4_Packet_Header_decoder.
-
-(* Step Four: Extract the decoder function, and have /it/ start decoding
-   at the start of the provided ByteString [v]. *)
-Arguments GetCurrentBytes : simpl never.
-Definition IPv4_decoder_impl {sz} v :=
-  Eval simpl in (projT1 IPv4_Packet_Header_decoder sz v 0 ()).
+Let IPv4_encoder :=  encoder_impl enc_dec.
+Let IPv4_decoder := decoder_impl enc_dec.
 
 Section BP.
   Local Opaque ByteBuffer.of_vector.
@@ -159,37 +136,30 @@ Definition bad_pkt :=
      DestAddress := WO~0~0~0~0~1~0~1~0~1~1~0~0~0~0~0~0~1~0~1~0~1~0~0~0~1~1~0~1~1~1~1~0;
      Options := [ ]%list |}.
 
-Eval vm_compute in (IPv4_decoder_impl bin_pkt).
+Eval vm_compute in (IPv4_decoder _ bin_pkt).
 
 Local Transparent natToWord.
 Local Transparent weqb.
 (* This should succeed, *)
 Eval compute in
-    Ifopt (IPv4_encoder_impl (initialize_Aligned_ByteString 100) pkt)
-  as bs Then IPv4_decoder_impl (fst (fst bs))
+    Ifopt (IPv4_encoder _ pkt (initialize_Aligned_ByteString 100))
+  as bs Then IPv4_decoder _ (fst (fst bs))
         Else None.
 (* and it does! *)
 
 (* This should fail because the total length field is too short, *)
 Eval compute in
-    Ifopt (IPv4_encoder_impl (initialize_Aligned_ByteString 100) bad_pkt)
-  as bs Then IPv4_decoder_impl (fst (fst bs))
+    Ifopt (IPv4_encoder _ bad_pkt (initialize_Aligned_ByteString 100))
+  as bs Then IPv4_decoder _ (fst (fst bs))
         Else None.
 (* and it does! *)
 
 (* Some addition checksum sanity checks. *)
 Compute
-  match IPv4_decoder_impl bin_pkt with
+  match IPv4_decoder _ bin_pkt with
   | Some (p, _, _) => Some ((wordToN p.(SourceAddress)), wordToN p.(DestAddress))
   | None => None
   end.
-
-Goal match AlignedIPChecksum.calculate_IPChecksum bin_pkt' 0 ()()  with
-     | Some (p, _, _) => p = bin_pkt
-     | None => True
-     end.
-  reflexivity.
-Qed.
 
 Definition pkt' := {|
                     TotalLength := WO~0~1~1~0~0~1~0~0~0~0~0~0~0~0~0~0;
@@ -203,10 +173,16 @@ Definition pkt' := {|
                     DestAddress := WO~1~1~0~0~0~0~0~0~1~0~1~0~1~0~0~0~1~1~0~1~1~1~1~0~0~0~0~0~0~0~0~1;
                     Options := [] |}.
 
-Goal match IPv4_encoder_impl (initialize_Aligned_ByteString 24) pkt'  with
+Goal match IPv4_encoder _ pkt' (initialize_Aligned_ByteString 24) with
      | Some (p, _, _) => p = bin_pkt
      | None => True
      end.
   compute.
   reflexivity.
 Qed.
+
+(* For use in TestInfrastructure.v *)
+Definition IPv4_encoder_impl {sz} v r :=
+Eval simpl in (projT1 (enc enc_dec) sz v 0 r tt).
+Definition IPv4_decoder_impl {sz} v :=
+Eval simpl in (projT1 (dec enc_dec) sz v 0 tt).
